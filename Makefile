@@ -33,6 +33,13 @@ notebook: ## Start Jupyter
 docker: ## Start Docker dev env
 	docker compose -f docker/docker-compose.yml up -d
 
+download-sample: ## Download 100-book sample dataset
+	uv run python -m scripts.generate_sample_dataset
+
+download-gutenberg: ## Download books from Gutenberg — make download-gutenberg NUM=500
+	uv run python -m scripts.download_and_upload_gutenberg \
+		--num-books $(or $(NUM),100) --output-dir ./data/raw
+
 lint: ## Lint with ruff
 	uv run ruff check src/ api/ tests/
 

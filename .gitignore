@@ -11,6 +11,9 @@ venv/
 .coverage
 data/output/
 data/raw/
+data/gutenberg_metadata.csv
+data/sample/sample_metadata.csv
+data/sample/*.txt
 *.parquet
 .env
 *.env.local

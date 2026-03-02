@@ -70,6 +70,24 @@ LSH_ENV=dev uv run uvicorn api.main:app --port 8000
 LSH_ENV=dev uv run streamlit run frontend/app.py
 ```
 
+## 📖 Data
+
+### Sample Dataset (100 books)
+
+Pre-selected 100 Gutenberg books across 12+ categories in `data/sample/`.
+
+```bash
+# Regenerate sample dataset
+make download-sample
+```
+
+### Full Dataset
+
+```bash
+# Download N books from Gutenberg
+make download-gutenberg NUM=500
+```
+
 ## 🧪 Tests
 
 ```bash

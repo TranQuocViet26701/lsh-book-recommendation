@@ -23,6 +23,9 @@ dependencies = [
     "numpy",
     "pandas",
     "matplotlib",
+
+    # Scraping (Gutenberg fallback)
+    "beautifulsoup4",
 ]
 
 [project.optional-dependencies]
