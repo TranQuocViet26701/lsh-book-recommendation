@@ -1,0 +1,46 @@
+[project]
+name = "lsh-book-recommendation"
+version = "0.1.0"
+description = "Similar Book Recommendation using Locality-Sensitive Hashing on Apache Spark"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    # Core
+    "pyspark>=3.5,<4",
+
+    # API
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "python-multipart",
+
+    # Frontend
+    "streamlit",
+    "requests",
+
+    # Data
+    "numpy",
+    "pandas",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "jupyter",
+    "notebook",
+    "ipykernel",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
