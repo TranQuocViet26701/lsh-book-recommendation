@@ -21,3 +21,9 @@ derby.log
 
 # uv
 uv.lock
+
+# local
+.claude/
+CLAUDE.md
+plans/
+docs/
