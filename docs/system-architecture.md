@@ -84,52 +84,74 @@ LSH Book Recommendation implements a distributed Locality-Sensitive Hashing syst
 **Dependencies**: `nltk>=3.8` (stopwords corpus, auto-downloaded on first run)
 
 #### 2.2 Shingling Module
-**Location**: `src/shingling/`
-**Input**: Token streams
-**Output**: Shingle sets per book
+**Location**: `src/shingling.py`
+**Status**: Implemented (62 LOC)
+**Input**: DataFrame(book_id, tokens: array<string>)
+**Output**: DataFrame(book_id, shingles: array<string>)
 
 **Algorithm**:
 ```
-For each book:
-  1. Convert tokens to k-shingles (k=5)
-  2. Store as Set[String] (unique shingles)
-  3. Compute shingle frequency
+For each book's token array:
+  1. Create sliding windows of k consecutive tokens
+  2. Join each window with spaces (e.g., [a, b, c] → "a b c")
+  3. Deduplicate shingles (convert to set, keep as array)
+  4. Filter out books with <k tokens (return empty arrays)
 ```
 
-**Configuration**: `SHINGLE_K=3` (dev) / `3` (cluster) - customizable in settings.py
+**Configuration**: `SHINGLE_K=3` (dev/cluster) — customizable in settings.py
+**Public API**: `generate_shingles(df, k)`, `run_shingling(input_path)`
 
 #### 2.3 MinHash Computation
-**Location**: `src/minhash/`
-**Input**: Shingle sets
-**Output**: Signature vectors
+**Location**: `src/minhash.py`
+**Status**: Implemented (100 LOC)
+**Input**: DataFrame(book_id, shingles: array<string>)
+**Output**: DataFrame(book_id, signature: array<int>)
 
 **Algorithm**:
 ```
 For each shingle set:
-  1. Hash with N independent hash functions
-  2. Select minimum hash value for each function
-  3. Create signature vector [h1_min, h2_min, ..., hN_min]
+  1. Generate N independent hash functions: h_i(x) = ((a_i × md5(x) + b_i) mod PRIME) mod MAX_HASH
+  2. For each hash function, compute minimum hash over all shingles
+  3. Return signature = [h1_min, h2_min, ..., hN_min] (length N)
 ```
 
+**Hash Function**: Universal hashing with md5 determinism
+- Base hash: `hashlib.md5(shingle).hexdigest()` → int
+- Parameters: random (a, b) pairs seeded with 42 for reproducibility
+- Collision-resistant, deterministic across sessions
+
 **Configuration**: `MINHASH_NUM_HASHES=50` (dev) / `100` (cluster)
+**Public API**: `compute_minhash_signatures(df, spark, num_hashes)`, `estimate_jaccard(sig_a, sig_b)`, `run_minhash(input_path)`
 
 #### 2.4 LSH Indexing
-**Location**: `src/lsh/`
-**Input**: Signature vectors
-**Output**: Bucket assignments
+**Location**: `src/lsh.py`
+**Status**: Implemented (112 LOC)
+**Input**: DataFrame(book_id, signature: array<int>)
+**Output**: DataFrame(book_id, band_id, bucket_hash)
 
 **Algorithm**:
 ```
 For each signature:
-  1. Split into B bands of r rows each
-  2. Hash each band to bucket
-  3. Assign to bucket [band_id, hash_value]
-  4. Group by bucket (similar signatures → same bucket)
+  1. Split into b bands of r rows each (b × r ≤ signature length)
+  2. For each band, serialize row values to bytes, hash via md5 → 32-bit int
+  3. Return array of (band_id, bucket_hash) tuples
+  4. Explode to one row per (book, band, bucket) triplet
 ```
 
+**Band Hashing**: md5 for determinism
+- Pack integers as struct: `struct.pack(f">>{len}i", *row_values)`
+- Hash bytes: `hashlib.md5(data).hexdigest()` → int mod PRIME
+
+**Candidate Pair Finding**: Self-join on (band_id, bucket_hash)
+- Books in same bucket in any band → candidate pair
+- Deduplication: book_id_1 < book_id_2 (no self-pairs)
+
 **Parameters**:
-- `LSH_NUM_BANDS=10` (dev) / `20` (cluster) - Number of bands
-- `LSH_ROWS_PER_BAND=5` (both) - Rows per band
+- `LSH_NUM_BANDS=10` (dev) / `20` (cluster) — Number of bands
+- `LSH_ROWS_PER_BAND=5` (both) — Rows per band
+- Constraint: `num_bands × rows_per_band ≤ num_hashes`
+
+**Public API**: `build_lsh_index(df, num_bands, rows_per_band)`, `find_candidate_pairs(lsh_index_df)`, `run_lsh(input_path)`
 
 #### 2.5 Evaluation Module
 **Location**: `src/evaluation/`

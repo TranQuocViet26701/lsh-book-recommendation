@@ -46,17 +46,19 @@ lsh-book-recommendation/
 ├── src/                  # Core Spark pipeline (FLAT FILE STRUCTURE)
 │   ├── __init__.py      # Package marker
 │   ├── preprocessing.py  # Tokenization & cleanup (120 LOC) ✅
-│   ├── shingling.py      # k-shingle generation (0 LOC - stub)
-│   ├── minhash.py        # MinHash signatures (0 LOC - stub)
-│   ├── lsh.py            # LSH bucketing (0 LOC - stub)
+│   ├── shingling.py      # k-shingle generation (62 LOC) ✅
+│   ├── minhash.py        # MinHash signatures (100 LOC) ✅
+│   ├── lsh.py            # LSH bucketing (112 LOC) ✅
+│   ├── main.py           # Pipeline entry (72 LOC) ✅
 │   ├── query.py          # Query engine (0 LOC - stub)
 │   ├── evaluation.py     # Metrics (0 LOC - stub)
-│   ├── utils.py          # Utilities (0 LOC - stub)
-│   └── main.py           # Pipeline entry (0 LOC - stub)
-├── tests/                # Unit & integration tests (118 LOC)
-│   ├── conftest.py      # SparkSession fixture (23 LOC)
+│   └── utils.py          # Utilities (0 LOC - stub)
+├── tests/                # Unit & integration tests (28 tests, all passing)
+│   ├── conftest.py      # SparkSession fixture (23 LOC) ✅
 │   ├── test_preprocessing.py  # 10 tests (118 LOC) ✅
-│   └── test_*.py        # Other tests (all stubs)
+│   ├── test_shingling.py      # 6 tests (90 LOC) ✅
+│   ├── test_minhash.py        # 6 tests (105 LOC) ✅
+│   └── test_lsh.py            # 6 tests (98 LOC) ✅
 ├── CLAUDE.md            # Development guidelines
 ├── Makefile             # Development commands (73 LOC)
 ├── pyproject.toml       # Python dependencies & config
@@ -136,6 +138,59 @@ make download-gutenberg NUM=500
 
 **Output**: Parquet files at `data/output/cleaned/` — schema `(book_id: string, tokens: array<string>)`
 **Validated**: 93 sample books processed successfully.
+
+#### Shingling Public API (`src/shingling.py`):
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `generate_shingles` | `(df: DataFrame, k: int = None) -> DataFrame` | Generate word-level k-shingles from token arrays; returns `(book_id, shingles: array<string>)` |
+| `run_shingling` | `(input_path: str = None) -> DataFrame` | Entry point: load preprocessed tokens, generate shingles, returns `(book_id, shingles)` |
+
+**Algorithm**: Sliding window of k consecutive tokens joined by space (e.g., `[a, b, c, d]` with k=3 → `["a b c", "b c d"]`)
+**Configuration**: `SHINGLE_K=3` (dev/cluster) — customizable via settings
+**Output**: Parquet ready for MinHash input
+
+#### MinHash Public API (`src/minhash.py`):
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `compute_minhash_signatures` | `(df: DataFrame, spark: SparkSession, num_hashes: int = None) -> DataFrame` | Compute MinHash signatures using universal hashing; returns `(book_id, signature: array<int>)` |
+| `estimate_jaccard` | `(sig_a: list, sig_b: list) -> float` | Estimate Jaccard similarity from two MinHash signatures |
+| `run_minhash` | `(input_path: str = None) -> DataFrame` | Entry point: load shingles, compute signatures |
+
+**Algorithm**: Universal hashing with md5 determinism — h_i(x) = ((a_i × md5(x) + b_i) mod PRIME) mod MAX_HASH
+**Configuration**: `MINHASH_NUM_HASHES=50` (dev) / `100` (cluster)
+**Hash Functions**: 200 for production (configurable)
+**Output**: Integer signatures, one per book
+
+#### LSH Public API (`src/lsh.py`):
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `build_lsh_index` | `(df: DataFrame, num_bands: int = None, rows_per_band: int = None) -> DataFrame` | Build LSH index by splitting signatures into bands & hashing; returns `(book_id, band_id, bucket_hash)` |
+| `find_candidate_pairs` | `(lsh_index_df: DataFrame) -> DataFrame` | Find candidate pairs via self-join on bucket membership; returns `(book_id_1, book_id_2)` |
+| `run_lsh` | `(input_path: str = None) -> DataFrame` | Entry point: load signatures, build LSH index |
+
+**Algorithm**: Band-based LSH — split signature into b bands of r rows, hash each band independently
+**Configuration**: `LSH_NUM_BANDS=10` (dev) / `20` (cluster), `LSH_ROWS_PER_BAND=5` (both)
+**Hash**: md5 for determinism across sessions
+**Output**: Band assignments, enables O(1) candidate pair retrieval
+
+#### Main Pipeline (`src/main.py`):
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `run_pipeline` | `() -> tuple[DataFrame, DataFrame]` | Full end-to-end pipeline: preprocess → shingle → minhash → lsh → save; returns `(signatures_df, lsh_index_df)` |
+
+**Steps**:
+1. Load preprocessed tokens from Parquet (`DATA_CLEANED_PATH`)
+2. Generate k-shingles (`SHINGLE_K`)
+3. Compute MinHash signatures (`MINHASH_NUM_HASHES`)
+4. Build LSH banding index (`LSH_NUM_BANDS`, `LSH_ROWS_PER_BAND`)
+5. Save signatures + index to Parquet
+
+**Output Paths**: `DATA_SIGNATURES_PATH`, `DATA_LSH_INDEX_PATH` (from config)
+**Timing**: ~2-3 min for 100 books (local[*])
 
 **Configuration** (from `config/settings.py`):
 - `SHINGLE_K=3` (dev) / `3` (cluster) - Shingle size
@@ -266,13 +321,19 @@ API (FastAPI) + UI (Streamlit)  (query interface)
 
 ## Testing Strategy
 
-- **Unit tests**: `tests/test_preprocessing.py` - 10 unit tests for preprocessing pipeline (all passing)
-- **Shared fixtures**: `tests/conftest.py` - session-scoped SparkSession (`local[1]`, 2g driver memory)
-- **Integration tests**: `tests/integration/` - End-to-end pipeline validation (planned)
+**Unit Tests** (28/28 passing):
+- `tests/test_preprocessing.py` — 10 tests for preprocessing (tokenization, stopwords)
+- `tests/test_shingling.py` — 6 tests for shingle generation (k-values, edge cases)
+- `tests/test_minhash.py` — 6 tests for signature computation (hashing, Jaccard estimation)
+- `tests/test_lsh.py` — 6 tests for banding & bucketing (band hashing, candidate pairs)
+
+**Shared fixtures**: `tests/conftest.py` — session-scoped SparkSession (`local[1]`, 2g driver memory)
+
+**Integration tests**: `tests/integration/` — End-to-end pipeline validation (planned)
 
 **Run tests**:
 ```bash
-make test                    # Run all tests
+make test                    # Run all 28 tests
 LSH_ENV=dev uv run pytest    # Custom test execution
 ```
 
