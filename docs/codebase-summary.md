@@ -50,15 +50,16 @@ lsh-book-recommendation/
 │   ├── minhash.py        # MinHash signatures (100 LOC) ✅
 │   ├── lsh.py            # LSH bucketing (112 LOC) ✅
 │   ├── main.py           # Pipeline entry (72 LOC) ✅
-│   ├── query.py          # Query engine (0 LOC - stub)
+│   ├── query.py          # Query engine (155 LOC) ✅
 │   ├── evaluation.py     # Metrics (0 LOC - stub)
 │   └── utils.py          # Utilities (0 LOC - stub)
-├── tests/                # Unit & integration tests (28 tests, all passing)
+├── tests/                # Unit & integration tests (35 tests, all passing)
 │   ├── conftest.py      # SparkSession fixture (23 LOC) ✅
 │   ├── test_preprocessing.py  # 10 tests (118 LOC) ✅
 │   ├── test_shingling.py      # 6 tests (90 LOC) ✅
 │   ├── test_minhash.py        # 6 tests (105 LOC) ✅
-│   └── test_lsh.py            # 6 tests (98 LOC) ✅
+│   ├── test_lsh.py            # 6 tests (98 LOC) ✅
+│   └── test_query.py          # 7 tests (93 LOC) ✅
 ├── CLAUDE.md            # Development guidelines
 ├── Makefile             # Development commands (73 LOC)
 ├── pyproject.toml       # Python dependencies & config
@@ -175,6 +176,26 @@ make download-gutenberg NUM=500
 **Configuration**: `LSH_NUM_BANDS=10` (dev) / `20` (cluster), `LSH_ROWS_PER_BAND=5` (both)
 **Hash**: md5 for determinism across sessions
 **Output**: Band assignments, enables O(1) candidate pair retrieval
+
+#### Query Public API (`src/query.py`):
+
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `find_similar_books` | `(spark, book_id, top_k=None, signatures_df=None, lsh_index_df=None) -> DataFrame` | Find top-K similar books for given book_id via LSH lookup & Jaccard ranking; returns `(book_id, similarity[, Title, Author])` |
+| `run_query` | `(book_id: str, top_k: int = None) -> DataFrame` | Entry point: creates SparkSession and finds similar books |
+
+**Algorithm**:
+1. Load signatures & LSH index (from Parquet or provided DataFrames)
+2. Extract query book's signature
+3. Find all buckets for query book across all bands
+4. Self-join LSH index to find candidate books sharing ≥1 bucket
+5. Compute Jaccard similarity via MinHash signature comparison (broadcast UDF)
+6. Sort descending by similarity, limit to top-K
+7. Optional: enrich with Title/Author from CSV metadata
+
+**Configuration**: `DEFAULT_TOP_K=10` (tunable), `DATA_METADATA_PATH` (optional CSV for enrichment)
+**Output**: DataFrame with `book_id`, `similarity`, and optional `Title`, `Author` columns
+**Command-line**: `python -m src.main query <book_id> [top_k]`
 
 #### Main Pipeline (`src/main.py`):
 

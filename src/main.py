@@ -80,4 +80,18 @@ def _save_parquet(df, path: str, label: str):
 
 
 if __name__ == "__main__":
-    run_pipeline()
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "query":
+        from src.query import run_query
+
+        bid = sys.argv[2] if len(sys.argv) > 2 else None
+        if not bid:
+            print("Usage: python -m src.main query <book_id> [top_k]")
+            sys.exit(1)
+        k = int(sys.argv[3]) if len(sys.argv) > 3 else None
+        results = run_query(bid, k)
+        results.show(truncate=False)
+        print(f"Found {results.count()} similar books for '{bid}'")
+    else:
+        run_pipeline()
