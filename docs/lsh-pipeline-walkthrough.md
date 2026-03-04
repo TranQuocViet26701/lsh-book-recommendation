@@ -1,6 +1,6 @@
 # LSH Pipeline Walkthrough
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-04
 
 Step-by-step guide explaining how the LSH book similarity pipeline works, from preprocessed tokens to candidate pair retrieval.
 
@@ -16,6 +16,10 @@ DataFrame(book_id, tokens)     ← Preprocessed Parquet
 [src/lsh.py]                   → DataFrame(book_id, band_id, bucket_hash)
         ↓
 Candidate pairs (book_id_1, book_id_2)
+        ↓
+[src/query.py]                 → DataFrame(book_id, similarity[, Title, Author])
+        ↓
+Top-K similar books for a given query book
 ```
 
 ## Step 1: k-Shingling (`src/shingling.py`)
@@ -120,6 +124,90 @@ run_pipeline()
 **Output files**:
 - `data/output/signatures/` — MinHash signatures per book
 - `data/output/lsh_index/` — LSH band/bucket index
+
+## Step 5: Query Engine (`src/query.py`)
+
+**Purpose**: Given a `book_id`, find the top-K most similar books using the precomputed LSH index and MinHash signatures.
+
+**Why not just compare all pairs?** The LSH index narrows candidates to books sharing at least one bucket. We only compute exact Jaccard similarity on this small candidate set — not the full N² pairs.
+
+**How it works**:
+
+```
+find_similar_books(spark, "pg1234", top_k=10)
+│
+├── 1. Load signatures + lsh_index from Parquet
+├── 2. Lookup query book's signature
+│      → If not found → return empty DataFrame
+├── 3. Get query book's (band_id, bucket_hash) tuples
+├── 4. Join against full index to find candidate book_ids
+│      → Filter out query book itself
+│      → .distinct() to deduplicate
+├── 5. Join candidates with their signatures
+├── 6. Broadcast query signature, apply Jaccard UDF
+│      → UDF calls estimate_jaccard(query_sig, candidate_sig)
+├── 7. Sort desc by similarity, limit top_k
+└── 8. (Optional) Enrich with Title/Author from metadata CSV
+```
+
+**Step-by-step example**:
+
+Suppose `pg1234` has signature `[3, 7, 1, 9, 2, 5, 8, 4, 6, 0]` and the LSH index has:
+
+```
+book_id  | band_id | bucket_hash
+---------|---------|------------
+pg1234   | 0       | 42
+pg1234   | 1       | 99
+pg5678   | 0       | 42      ← shares bucket with pg1234 in band 0
+pg9999   | 1       | 99      ← shares bucket with pg1234 in band 1
+pg0000   | 0       | 77      ← no shared bucket
+```
+
+1. **Query buckets**: `[(0, 42), (1, 99)]`
+2. **Candidates**: `{pg5678, pg9999}` (share at least one bucket)
+3. **Jaccard computation**: compare signatures pairwise via `estimate_jaccard`
+4. **Ranking**: sort by similarity descending, limit to `top_k`
+
+**Broadcast UDF pattern**: The query signature is broadcast to all executors once, avoiding repeated serialization per row.
+
+```python
+query_sig_bc = spark.sparkContext.broadcast(query_signature)
+
+@F.udf(FloatType())
+def jaccard_udf(candidate_sig):
+    return float(estimate_jaccard(query_sig_bc.value, candidate_sig))
+```
+
+**Metadata enrichment** (`_enrich_with_metadata`):
+- Reads `sample_metadata.csv` (columns: `GutenbergID, Title, Author, Bookshelf, Link`)
+- Converts `GutenbergID` → `book_id` by prepending `"pg"` (e.g. `17135` → `pg17135`)
+- Left-joins results to add `Title` and `Author` columns
+- Silently skipped if CSV not available (try/except)
+
+**Edge cases**:
+- Unknown `book_id` → returns empty DataFrame with schema `(book_id, similarity)`, no exception
+- No candidates (unique buckets) → empty result
+- Metadata CSV missing → results returned without Title/Author columns
+
+**Key function**: `find_similar_books(spark, book_id, top_k=10)`
+- Input: `book_id` string
+- Output: `DataFrame(book_id, similarity[, Title, Author])` sorted desc
+- Accepts optional `signatures_df` and `lsh_index_df` params for testing
+
+**Run**:
+```bash
+# Via Makefile
+make query BOOK=pg1234
+
+# Via main pipeline
+LSH_ENV=dev uv run python -m src.main query pg1234 10
+
+# Direct module
+LSH_ENV=dev uv run python -m src.query pg1234 10
+```
+
+**Config**: `DEFAULT_TOP_K = 10`
 
 ## Parameter Tuning Guide
 
