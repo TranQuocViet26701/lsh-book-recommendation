@@ -1,6 +1,6 @@
 # Codebase Summary
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-04
 **Version**: 0.1.0
 **Project**: LSH Book Recommendation System
 **Team**: Nguyễn Hoàng Kiên, Ngô Hoài Tú, Trần Quốc Việt
@@ -342,11 +342,12 @@ API (FastAPI) + UI (Streamlit)  (query interface)
 
 ## Testing Strategy
 
-**Unit Tests** (28/28 passing):
+**Unit Tests** (35/35 passing):
 - `tests/test_preprocessing.py` — 10 tests for preprocessing (tokenization, stopwords)
 - `tests/test_shingling.py` — 6 tests for shingle generation (k-values, edge cases)
 - `tests/test_minhash.py` — 6 tests for signature computation (hashing, Jaccard estimation)
 - `tests/test_lsh.py` — 6 tests for banding & bucketing (band hashing, candidate pairs)
+- `tests/test_query.py` — 7 tests for query engine (similarity ranking, top-k, unknown books)
 
 **Shared fixtures**: `tests/conftest.py` — session-scoped SparkSession (`local[1]`, 2g driver memory)
 
@@ -354,7 +355,7 @@ API (FastAPI) + UI (Streamlit)  (query interface)
 
 **Run tests**:
 ```bash
-make test                    # Run all 28 tests
+make test                    # Run all 35 tests
 LSH_ENV=dev uv run pytest    # Custom test execution
 ```
 

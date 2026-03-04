@@ -1,6 +1,6 @@
 # LSH Book Recommendation — Project Roadmap
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-04
 **Current Version**: 0.1.0
 **Project Duration**: 7 weeks (HK2 2025-2026)
 **Team**: Nguyễn Hoàng Kiên, Ngô Hoài Tú, Trần Quốc Việt
@@ -36,11 +36,11 @@ Established project infrastructure, data acquisition pipeline, preprocessing fra
 
 ---
 
-### Phase 2: Core LSH Algorithm (Week 3-5)
-**Status**: ⏳ **IN PROGRESS** (Week 3 COMPLETE)
-**Week 3 Completion Date**: 2026-03-03
-**Target Completion (Weeks 4-5)**: 2026-03-31
-**Progress**: 33% (1 of 3 weeks)
+### Phase 2: Core LSH Algorithm (Week 3-6)
+**Status**: ✅ **COMPLETE**
+**Week 3-5 Completion Date**: 2026-03-03
+**Week 6 Completion Date**: 2026-03-04
+**Progress**: 100%
 
 Implement the core LSH pipeline: shingling, MinHash signatures, LSH bucketing, and query engine.
 
@@ -100,22 +100,42 @@ Implement the core LSH pipeline: shingling, MinHash signatures, LSH bucketing, a
 
 **Tests**: 6 tests covering band splitting, hashing, candidate pairs, parameter validation
 **Performance**: ~2-3 min for 100 books (local[*])
-**Query Engine**: Stub (`src/query.py`) — deferred to Phase 3
+
+#### Week 6: Query Engine ✅ COMPLETE
+**Completion**: 2026-03-04
+
+**Delivered**:
+- [x] `src/query.py` - Query engine with Jaccard ranking (155 LOC)
+- [x] Unit tests (7 test cases, all passing)
+- [x] Main.py integration (`python -m src.main query <book_id> [top_k]`)
+- [x] Metadata enrichment (optional Title/Author join from CSV)
+
+**Achievements**:
+- ✅ LSH lookup: find books sharing ≥1 bucket with query book
+- ✅ Jaccard similarity via MinHash signature comparison
+- ✅ Broadcast UDF factory pattern for efficient distributed computation
+- ✅ Top-K result limiting with descending similarity sort
+- ✅ Metadata enrichment with graceful fallback
+- ✅ Output: DataFrame(book_id, similarity[, Title, Author])
+- ✅ Public API: `find_similar_books()`, `run_query()`
+
+**Tests**: 7 tests covering identical similarity (1.0), result sorting, top-k limiting, unknown books, self-exclusion, no candidates, partial similarity
+**Command-line Interface**: `python -m src.main query <book_id> [top_k]` with result display
 
 **Summary Stats**:
-- **Total Code Added**: 346 LOC (shingling + minhash + lsh + main)
-- **Total Tests**: 18 new tests (6+6+6), all passing
-- **Total Test Suite**: 28/28 tests passing
+- **Total Code Added**: 501 LOC (shingling 62 + minhash 100 + lsh 112 + main 72 + query 155)
+- **Total Tests**: 25 new tests (6+6+6+7), all passing
+- **Total Test Suite**: 35/35 tests passing
 
 ---
 
-### Phase 3: Serving Layer (Week 6)
+### Phase 3: Serving Layer (Week 7)
 **Status**: ⏳ **NOT STARTED**
-**Planned Start**: 2026-04-01
-**Target Completion**: 2026-04-07
+**Planned Start**: 2026-03-05
+**Target Completion**: 2026-03-11
 **Progress**: 0%
 
-Implement REST API and web UI for querying the LSH index.
+Implement REST API and web UI for querying the LSH index. Query engine (`src/query.py`) complete; focus on FastAPI endpoints and Streamlit UI.
 
 #### FastAPI REST API
 
@@ -160,10 +180,10 @@ Implement REST API and web UI for querying the LSH index.
 
 ---
 
-### Phase 4: Testing & Optimization (Week 7)
+### Phase 4: Testing & Optimization (Week 8)
 **Status**: ⏳ **NOT STARTED**
-**Planned Start**: 2026-04-08
-**Target Completion**: 2026-04-14
+**Planned Start**: 2026-03-12
+**Target Completion**: 2026-03-18
 **Progress**: 0%
 
 Comprehensive testing, performance optimization, experiments, and final documentation.
@@ -200,9 +220,10 @@ Comprehensive testing, performance optimization, experiments, and final document
 | 1-2 | Foundation | Preprocessing pipeline complete | ✅ Complete | 2026-03-03 |
 | 3 | LSH - Shingling | Shingle generation working | ✅ Complete | 2026-03-03 |
 | 4 | LSH - MinHash | MinHash signatures computed | ✅ Complete | 2026-03-03 |
-| 5 | LSH - Query | LSH index + pipeline | ✅ Complete | 2026-03-03 |
-| 6 | Serving | API + UI deployed | ⏳ Pending | 2026-04-07 |
-| 7 | Testing/Report | Final report + presentation | ⏳ Pending | 2026-04-14 |
+| 5 | LSH - LSH Indexing | LSH index + pipeline | ✅ Complete | 2026-03-03 |
+| 6 | Query Engine | Query module + Jaccard ranking | ✅ Complete | 2026-03-04 |
+| 7 | Serving | API + UI deployed | ⏳ Pending | 2026-03-11 |
+| 8 | Testing/Report | Final report + presentation | ⏳ Pending | 2026-03-18 |
 
 ## Success Criteria
 
@@ -212,21 +233,22 @@ Comprehensive testing, performance optimization, experiments, and final document
 - [x] 10 unit tests passing
 - [x] Docker dev environment ready
 
-### Week 3-5 ✅ ACHIEVED (LSH Algorithm Complete)
+### Week 3-6 ✅ ACHIEVED (LSH Algorithm + Query Engine Complete)
 - [x] Shingling module complete and tested (6 tests)
 - [x] MinHash signatures computed correctly (6 tests)
 - [x] LSH banding & bucketing working (6 tests)
+- [x] Query engine implemented with Jaccard ranking (7 tests)
 - [x] Full pipeline end-to-end tested
-- [x] 28/28 integration tests passing
+- [x] 35/35 tests passing
 - [x] All modules publicly documented with APIs
-- [x] Query engine design ready (implementation Phase 3)
+- [x] Command-line query interface: `python -m src.main query <book_id>`
 
-### Week 6 TARGETS (Serving)
+### Week 7 TARGETS (Serving)
 - [ ] REST API accepting queries
 - [ ] Streamlit UI responsive and usable
 - [ ] API + UI communication working end-to-end
 
-### Week 7 TARGETS (Testing/Deployment)
+### Week 8 TARGETS (Testing/Deployment)
 - [ ] All tests passing (coverage > 80%)
 - [ ] Performance benchmarks documented
 - [ ] Scalability validated
@@ -251,14 +273,16 @@ Week 3 (Shingling) ✅
     ↓
 Week 4 (MinHash) ✅ — depends on Week 3
     ↓
-Week 5 (LSH + Pipeline) ✅ — depends on Week 4
+Week 5 (LSH Indexing) ✅ — depends on Week 4
     ↓
-Week 6 (API + UI) — depends on Week 5 ✅
+Week 6 (Query Engine) ✅ — depends on Week 5
     ↓
-Week 7 (Testing + Report) — depends on Weeks 5-6
+Week 7 (API + UI) — depends on Week 6
+    ↓
+Week 8 (Testing + Report) — depends on Weeks 6-7
 ```
 
-**STATUS SUMMARY**: 3 weeks ahead of schedule (all LSH core algorithms complete by 2026-03-03)
+**STATUS SUMMARY**: 4 weeks ahead of schedule (query engine complete 2026-03-04, LSH core algorithms + query ready for serving layer)
 
 ## Resource Allocation
 
@@ -279,12 +303,13 @@ Week 7 (Testing + Report) — depends on Weeks 5-6
 ### Progress Tracking
 
 Weekly status updates:
-- Week 1-2: ✅ COMPLETE (2026-03-03)
+- Week 1-2: ✅ COMPLETE (2026-03-03) — Preprocessing + 10 tests
 - Week 3: ✅ COMPLETE (2026-03-03) — Shingling module + 6 tests
 - Week 4: ✅ COMPLETE (2026-03-03) — MinHash module + 6 tests
 - Week 5: ✅ COMPLETE (2026-03-03) — LSH module + Pipeline + 6 tests
-- Week 6: ⏳ Target 2026-04-07 — API + UI implementation
-- Week 7: ⏳ Target 2026-04-14 — Query engine, testing, final report
+- Week 6: ✅ COMPLETE (2026-03-04) — Query engine + 7 tests
+- Week 7: ⏳ Target 2026-03-11 — API + UI implementation
+- Week 8: ⏳ Target 2026-03-18 — Testing, final report, presentation
 
 ## Key Decisions & Constraints
 
@@ -306,22 +331,22 @@ Weekly status updates:
 ## Implementation Highlights
 
 ### Code Quality
-- **Total LOC Added**: 346 (shingling 62 + minhash 100 + lsh 112 + main 72)
-- **Documentation**: Full public API tables for 4 modules
-- **Test Coverage**: 18 new tests, 100% pass rate (28/28 total)
+- **Total LOC Added**: 501 (shingling 62 + minhash 100 + lsh 112 + main 72 + query 155)
+- **Documentation**: Full public API tables for 5 modules
+- **Test Coverage**: 25 new tests, 100% pass rate (35/35 total)
 
 ### Technology Stack
 - **Hashing**: `hashlib.md5` for deterministic, cross-session consistency
 - **Spark Integration**: UDF+broadcast for efficient distributed hashing
 - **Scalability**: O(1) band lookup, O(K) candidate similarity
 
-### Next Phase (Week 6)
-- Implement query engine (`src/query.py`) — Jaccard similarity computation
+### Next Phase (Week 7)
 - REST API endpoints (`api/routers/books.py`)
 - Streamlit UI pages (`frontend/pages/2_Similar_Books.py`)
+- Query endpoint integration with existing `src/query.py`
 
 ## Document Maintenance
 
-This roadmap updated: 2026-03-03
+This roadmap updated: 2026-03-04
 
-**Next Review Target**: 2026-03-17 (mid-Week 6)
+**Next Review Target**: 2026-03-11 (end of Week 7 / Serving layer)
