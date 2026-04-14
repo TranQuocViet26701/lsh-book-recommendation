@@ -21,11 +21,11 @@ from config.settings import config
 
 def run_preparation_pipeline(output_path):
     """
-    Executes the end-to-end data preparation for Pairwise pipeline: 
+    Executes the end-to-end data preparation pipeline: 
     Raw Text -> Cleaned Tokens -> k-Shingles -> Parquet.
     """
     print("\n" + "="*50)
-    print("🚀 STARTING DATA PREPARATION PAIRWISE PIPELINE (FORCED LOCAL MODE)")
+    print("🚀 STARTING DATA PREPARATION PIPELINE (FORCED LOCAL MODE)")
     print("="*50)
     
     # =====================================================================
@@ -35,7 +35,7 @@ def run_preparation_pipeline(output_path):
     current_dir = os.path.abspath(os.getcwd())
     safe_dir = current_dir.replace("\\", "/")
     
-    local_raw_path = f"file:///{safe_dir}/data/sample/raw_texts/"
+    local_raw_path = f"file:///{safe_dir}/data/sample/"
     
     print(f"[*] Overriding HDFS config to local path:\n    {local_raw_path}")
     
@@ -69,4 +69,34 @@ def run_preparation_pipeline(output_path):
 
     # Step 5: Save to Parquet
     # Force the output path to use file:/// as well for safety
-    safe_output = f"file:///{safe_dir}/{output_path
+    safe_output = f"file:///{safe_dir}/{output_path.strip('./')}"
+    print(f"[*] Step 5: Saving shingled data to Parquet at:\n    {safe_output}")
+    
+    # Coalescing to 1 partition is optimal for small sample datasets
+    shingled_df.coalesce(1).write.mode("overwrite").parquet(safe_output)
+    
+    execution_time = time.time() - start_time
+    print(f"\n[*] SUCCESS! Data preparation complete in {execution_time:.2f} seconds.")
+    
+    # Action to force execution and display count
+    total_records = shingled_df.count()
+    print(f"[*] Generated shingled records for {total_records} books.")
+    print("[*] The data is now ready for the Exact Pairwise Baseline pipeline.")
+
+    spark.stop()
+
+def main():
+    parser = argparse.ArgumentParser(description="Prepare Sample Data for Book Recommendation Baseline")
+    parser.add_argument(
+        "--output", 
+        type=str, 
+        default="data/sample/shingled_books.parquet", 
+        help="Destination path for saving the shingled parquet file"
+    )
+    
+    args = parser.parse_args()
+
+    run_preparation_pipeline(args.output)
+
+if __name__ == "__main__":
+    main()
