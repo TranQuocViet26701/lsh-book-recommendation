@@ -76,6 +76,8 @@ LSH_ENV=dev uv run streamlit run frontend/app.py
 
 Pre-selected 100 Gutenberg books across 12+ categories in `data/sample/`.
 
+TODO: missing description about gutenberg metadata file 
+
 ```bash
 # Regenerate sample dataset
 make download-sample
