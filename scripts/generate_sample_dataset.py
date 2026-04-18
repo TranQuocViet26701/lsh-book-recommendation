@@ -8,6 +8,7 @@ writes data/sample/sample_metadata.csv.
 import logging
 import os
 import time
+import asyncio
 
 import pandas as pd
 
@@ -54,9 +55,31 @@ def select_stratified_books(df: pd.DataFrame, n_per_cat: int = BOOKS_PER_CATEGOR
 
     return selected_orig.head(TOTAL_BOOKS).reset_index(drop=True)
 
+async def download_books_async(row: pd.Series, output_dir: str) -> int: 
+    book_id = row["GutenbergID"]
+    filepath = os.path.join(output_dir, f"pg{book_id}.txt")
 
-def generate_sample(csv_path: str = DEFAULT_CSV_PATH, output_dir: str = DEFAULT_OUTPUT_DIR) -> dict:
+    # Resumability: skip already-downloaded files
+    if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
+        logger.info(f"Skip pg{book_id} (already exists)")
+        return 1
+
+    result = await asyncio.to_thread(download_and_save_book, book_id, output_dir)
+    if result["success"]:
+        logger.info(f"Downloaded pg{book_id} – {row['Title']}")
+        return 0
+    else:
+        logger.warning("Failed pg%d – %s: %s", book_id, row["Title"], result["error"])
+        return -1
+
+
+async def generate_sample(csv_path: str, output_dir: str) -> dict:
     """Main pipeline: load metadata -> select books -> download -> save metadata CSV."""
+
+    if not os.path.exists(csv_path):
+        logger.error("Metadata CSV not found at %s", csv_path)
+        return {"error": "Metadata CSV not found"}
+
     logger.info("Loading metadata from %s", csv_path)
     df = load_metadata(csv_path)
     logger.info("Loaded %d books with Author + Bookshelf", len(df))
@@ -70,29 +93,13 @@ def generate_sample(csv_path: str = DEFAULT_CSV_PATH, output_dir: str = DEFAULT_
 
     os.makedirs(output_dir, exist_ok=True)
 
-    downloaded = 0
-    skipped = 0
-    failed = 0
+    tasks = [download_books_async(row, output_dir) for _, row in selected.iterrows()]
 
-    for _, row in selected.iterrows():
-        book_id = row["GutenbergID"]
-        filepath = os.path.join(output_dir, f"pg{book_id}.txt")
+    results = await asyncio.gather(*tasks)
 
-        # Resumability: skip already-downloaded files
-        if os.path.exists(filepath) and os.path.getsize(filepath) > 0:
-            logger.info("Skip pg%d (already exists)", book_id)
-            skipped += 1
-            continue
-
-        result = download_and_save_book(book_id, output_dir)
-        if result["success"]:
-            downloaded += 1
-            logger.info("Downloaded pg%d – %s", book_id, row["Title"])
-        else:
-            failed += 1
-            logger.warning("Failed pg%d – %s: %s", book_id, row["Title"], result["error"])
-
-        time.sleep(DEFAULT_DELAY)
+    downloaded = len([x for x in results if x == 0])
+    failed = len([x for x in results if x == -1])
+    skipped = len([x for x in results if x == 1])
 
     # Save sample metadata CSV
     meta_path = os.path.join(output_dir, "sample_metadata.csv")
@@ -117,8 +124,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     parser = argparse.ArgumentParser(description="Generate 100-book sample dataset")
-    parser.add_argument("--csv", default=DEFAULT_CSV_PATH, help="Path to gutenberg_metadata.csv")
-    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Output directory")
+    parser.add_argument("--csv", default=DEFAULT_CSV_PATH, help="Path to gutenberg_metadata.csv. Default: %(default)s")
+    parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Output directory. Default: %(default)s")
     args = parser.parse_args()
 
-    generate_sample(csv_path=args.csv, output_dir=args.output_dir)
+    asyncio.run(generate_sample(csv_path=args.csv, output_dir=args.output_dir))
