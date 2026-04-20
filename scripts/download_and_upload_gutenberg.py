@@ -13,6 +13,7 @@ import logging
 import os
 import sys
 import time
+import asyncio
 
 import pandas as pd
 
@@ -33,13 +34,29 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--csv", default=DEFAULT_CSV, help="Path to metadata CSV")
     parser.add_argument("--num-books", type=int, default=None, help="Number of books")
     parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR, help="Local output directory")
-    parser.add_argument("--hdfs-dir", default=None, help="If set, upload to HDFS after download")
+    parser.add_argument("--hdfs-dir", default='/', help="If set, upload to HDFS after download")
     parser.add_argument("--start-row", type=int, default=0, help="Starting row in CSV")
     parser.add_argument("--delay", type=float, default=DEFAULT_DELAY, help="Delay between requests")
     return parser.parse_args()
 
+async def download_books_async(row: pd.Series, output_dir: str, hdfs_dir: str | None) -> int:
+    book_id = extract_gutenberg_id(row["Link"])
 
-def main() -> None:
+    # result = download_and_save_book(book_id, output_dir)
+    result = await asyncio.to_thread(download_and_save_book, book_id, output_dir)
+    if result["success"]:
+        logger.info("OK  pg%d – %s", book_id, row.get("Title", "?"))
+
+        # Optional HDFS upload
+        if hdfs_dir and result["path"]:
+            upload_file_to_hdfs(result["path"], hdfs_dir)
+        
+        return 0
+    else:
+        logger.warning("FAIL pg%d – %s", book_id, result["error"])
+        return -1
+
+async def main() -> None:
     args = parse_arguments()
 
     # Load metadata
@@ -64,29 +81,15 @@ def main() -> None:
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    success_count = 0
-    fail_count = 0
+    tasks = [download_books_async(row, args.output_dir, args.hdfs_dir) for _, row in df.iterrows()]
+    results = await asyncio.gather(*tasks)
 
-    for _, row in df.iterrows():
-        book_id = extract_gutenberg_id(row["Link"])
-
-        result = download_and_save_book(book_id, args.output_dir)
-        if result["success"]:
-            success_count += 1
-            logger.info("OK  pg%d – %s", book_id, row.get("Title", "?"))
-
-            # Optional HDFS upload
-            if args.hdfs_dir and result["path"]:
-                upload_file_to_hdfs(result["path"], args.hdfs_dir)
-        else:
-            fail_count += 1
-            logger.warning("FAIL pg%d – %s", book_id, result["error"])
-
-        time.sleep(args.delay)
+    fail_count = len([x for x in results if x == -1])
+    success_count = len([x for x in results if x == 0])
 
     logger.info("Done. Success: %d  Failed: %d  Total: %d", success_count, fail_count, len(df))
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-    main()
+    asyncio.run(main())

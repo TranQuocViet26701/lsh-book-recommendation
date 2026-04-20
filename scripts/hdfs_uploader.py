@@ -46,7 +46,7 @@ def upload_file_to_hdfs(
                 text=True,
             )
             if result.returncode == 0:
-                logger.info("Uploaded %s -> %s", local_path, hdfs_dir)
+                logger.info("Uploaded local file %s -> HDFS %s", local_path, hdfs_dir)
                 return True
             logger.warning(
                 "Attempt %d/%d failed for %s: %s",
