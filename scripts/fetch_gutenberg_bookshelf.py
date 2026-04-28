@@ -161,3 +161,12 @@ def fetch_bookshelves(
         )
         for name in shelf_names
     }
+
+if __name__ == "__main__":
+    # Example usage: fetch 10 books each from "Science Fiction" and "Detective Fiction" shelves.
+    shelves_to_fetch = ["Science Fiction", "Children's Literature", "Detective Fiction"]
+    results = fetch_bookshelves(shelves_to_fetch, per_shelf_limit=30)
+    for shelf, paths in results.items():
+        print(f"Shelf: {shelf}, fetched {len(paths)} books:")
+        for p in paths:
+            print(f"  {p}")
