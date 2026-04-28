@@ -10,23 +10,10 @@ dependencies = [
     "pyspark>=3.5,<4",
     "nltk>=3.8",
 
-    # API
-    "fastapi",
-    "uvicorn",
-    "pydantic",
-    "python-multipart",
-
-    # Frontend
-    "streamlit",
-    "requests",
-
     # Data
     "numpy",
     "pandas",
     "matplotlib",
-
-    # Scraping (Gutenberg fallback)
-    "beautifulsoup4",
 ]
 
 [project.optional-dependencies]
