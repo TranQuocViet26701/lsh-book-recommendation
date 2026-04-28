@@ -37,6 +37,20 @@ All notable changes to this project are documented in this file. Format follows 
 
 ---
 
+## [0.2.1] — 2026-04-28
+
+### Fixed
+- `notebooks/04_experiments.ipynb` Databricks Free Edition Serverless compatibility patch:
+  - Prepended `%pip install nltk` + guarded `dbutils.library.restartPython()` cell at index 0 (Serverless image has no nltk preinstalled).
+  - Replaced unconditional `.cache()` / `.unpersist()` calls with a `_maybe_cache(df)` helper gated on `_in_databricks` (Serverless rejects `PERSIST TABLE` with SQLSTATE 0A000; local Spark needs cache for tractable Python-UDF re-compute cost).
+  - Trimmed `sizes_tn3` default from `[200, 500, 1000, 1500]` to `[200, 500, 1000]` to stay under Free Edition driver memory.
+- `docs/databricks-setup-guide.md`: appended **Serverless Compatibility Checklist** documenting hard restrictions (sparkContext, persist, conf.set, RDD APIs, dbutils.fs.mount, missing nltk) and the canonical `_in_databricks` + `_maybe_cache` guard pattern.
+
+### Verified
+- `LSH_ENV=dev uv run --extra dev pytest -q` → 35/35 tests pass.
+
+---
+
 ## [0.1.0] — 2026-03-04
 
 ### Added
