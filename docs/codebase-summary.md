@@ -1,378 +1,235 @@
 # Codebase Summary
 
-**Last Updated**: 2026-03-04
-**Version**: 0.1.0
+**Last Updated**: 2026-04-28
+**Version**: 0.2.0
 **Project**: LSH Book Recommendation System
 **Team**: Nguyễn Hoàng Kiên, Ngô Hoài Tú, Trần Quốc Việt
 **Course**: CO5135 Big Data — HK2 2025-2026
 
 ## Overview
 
-LSH Book Recommendation is a distributed system for finding similar books using Locality-Sensitive Hashing (LSH) on Apache Spark. The system processes large-scale book datasets from Project Gutenberg, generates minwise signatures, and enables fast similarity queries through LSH bucketing.
+LSH Book Recommendation is a notebook-driven, distributed system for finding similar books using Locality-Sensitive Hashing (LSH) on Apache Spark. After the Databricks Free Edition (Serverless) migration, the experiment surface lives in `notebooks/04_experiments.ipynb` and consumes pre-cleaned parquet from a Unity Catalog Volume. The same `src/` codebase runs locally for tests and dev.
 
-**Architecture**: Streamlit → FastAPI → PySpark → HDFS + Parquet
+**Architecture**: Notebook (Databricks Serverless / Local) → PySpark → Parquet (UC Volume / local)
 
 ## Project Structure
 
 ```
 lsh-book-recommendation/
-├── .claude/              # Claude Code configuration & skills
-├── .github/              # GitHub Actions workflows
-├── api/                  # FastAPI REST API (stubs only)
-│   ├── main.py          # App entry (0 LOC)
-│   ├── routers/         # Endpoint handlers (all stubs)
-│   └── schemas.py       # Pydantic models (0 LOC)
+├── .claude/              # Claude Code config & skills (gitignored)
 ├── config/               # Configuration management
-│   ├── dev.env          # Development environment
-│   ├── cluster.env      # Cluster settings
-│   └── settings.py      # Settings loader (59 LOC) ✅
-├── data/                 # Data storage & datasets
-│   ├── sample/          # 100-book development sample (pre-downloaded)
-│   └── output/          # Pipeline results (Parquet files)
+│   ├── dev.env           # Local dev env vars
+│   └── settings.py       # DevConfig / ClusterConfig / DatabricksConfig
+├── data/                 # Data storage
+│   ├── sample/           # 100-book raw .txt for local dev
+│   └── output/cleaned/   # Pre-cleaned parquet (uploaded to UC Volume on Databricks)
 ├── docs/                 # Project documentation
-├── docker/               # Docker dev environment (PySpark + Jupyter)
-├── frontend/             # Streamlit web UI (stubs only)
-│   ├── app.py           # Main entry (0 LOC)
-│   └── pages/           # Multi-page components (all stubs)
-├── notebooks/            # Jupyter exploration & demos
-├── plans/                # Implementation plans
-├── scripts/              # Data ingestion package (355 LOC total)
-│   ├── __init__.py      # Package marker
-│   ├── text_cleaning_utils.py       # Text cleaning (97 LOC) ✅
-│   ├── gutenberg_downloader.py      # Gutenberg API client (134 LOC) ✅
-│   ├── hdfs_uploader.py             # HDFS integration (115 LOC) ✅
-│   ├── generate_sample_dataset.py   # Sample generator (124 LOC) ✅
-│   └── download_and_upload_gutenberg.py  # CLI orchestrator (92 LOC) ✅
-├── src/                  # Core Spark pipeline (FLAT FILE STRUCTURE)
-│   ├── __init__.py      # Package marker
-│   ├── preprocessing.py  # Tokenization & cleanup (120 LOC) ✅
-│   ├── shingling.py      # k-shingle generation (62 LOC) ✅
-│   ├── minhash.py        # MinHash signatures (100 LOC) ✅
-│   ├── lsh.py            # LSH bucketing (112 LOC) ✅
-│   ├── main.py           # Pipeline entry (72 LOC) ✅
-│   ├── query.py          # Query engine (155 LOC) ✅
-│   ├── evaluation.py     # Metrics (0 LOC - stub)
-│   └── utils.py          # Utilities (0 LOC - stub)
-├── tests/                # Unit & integration tests (35 tests, all passing)
-│   ├── conftest.py      # SparkSession fixture (23 LOC) ✅
-│   ├── test_preprocessing.py  # 10 tests (118 LOC) ✅
-│   ├── test_shingling.py      # 6 tests (90 LOC) ✅
-│   ├── test_minhash.py        # 6 tests (105 LOC) ✅
-│   ├── test_lsh.py            # 6 tests (98 LOC) ✅
-│   └── test_query.py          # 7 tests (93 LOC) ✅
-├── CLAUDE.md            # Development guidelines
-├── Makefile             # Development commands (73 LOC)
-├── pyproject.toml       # Python dependencies & config
-├── README.md            # Project overview (96 LOC)
-└── repomix-output.xml   # Codebase compaction (AI analysis)
+│   ├── databricks-setup-guide.md   # Free Edition setup walkthrough
+│   ├── system-architecture.md      # Architectural overview
+│   ├── codebase-summary.md         # This file
+│   ├── code-standards.md
+│   ├── project-overview-pdr.md
+│   └── project-roadmap.md
+├── notebooks/            # 5 Jupyter notebooks (Databricks-aware setup)
+│   ├── 01_data_exploration.ipynb
+│   ├── 02_preprocessing_demo.ipynb
+│   ├── 03_lsh_pipeline_demo.ipynb
+│   ├── 04_experiments.ipynb        # Course report deliverable (TN1–TN4)
+│   └── 05_query_demo.ipynb
+├── plans/                # Implementation plans (gitignored)
+├── scripts/              # Helper scripts
+│   ├── __init__.py
+│   ├── text_cleaning_utils.py             # Gutenberg header strip
+│   └── bootstrap-nltk-stopwords-to-volume.py  # Pre-bundle NLTK for Databricks
+├── src/                  # Core Spark pipeline
+│   ├── __init__.py
+│   ├── preprocessing.py            # Tokenize + stopword removal (Databricks-aware Spark)
+│   ├── shingling.py                # k-shingle generation
+│   ├── minhash.py                  # MinHash signatures
+│   ├── lsh.py                      # Band/bucket index + candidate pairs
+│   ├── query.py                    # Top-K similarity lookup
+│   ├── query_by_text_helpers.py    # Helper utilities for nb 05
+│   ├── evaluation.py               # Metrics (recall/precision/F1/FPR)
+│   └── utils.py
+├── tests/                # 35 unit tests (all passing)
+│   ├── conftest.py                 # SparkSession fixture
+│   ├── test_preprocessing.py       # 10 tests
+│   ├── test_shingling.py           # 6 tests
+│   ├── test_minhash.py             # 6 tests
+│   ├── test_lsh.py                 # 6 tests
+│   └── test_query.py               # 7 tests
+├── CLAUDE.md             # Dev guidelines (gitignored)
+├── Makefile              # sync / test / notebook / lint / format
+├── pyproject.toml        # 5 prod deps, 5 dev deps
+├── README.md             # Quick start
+└── uv.lock
 ```
-
-**Legend**: ✅ Implemented | ⏳ Stub (not implemented)
 
 ## Core Technologies
 
-### Runtime & Dependencies
+### Runtime
 - **Python**: >= 3.10
-- **Package Manager**: uv (recommended) / pip
-- **Spark**: >= 3.5 (PySpark)
-- **Java**: 11+ (Spark requirement)
+- **Package Manager**: uv
+- **Spark**: PySpark >= 3.5
+- **Java**: 11+ (local Spark requirement; not needed on Databricks)
 
-### Data Processing Stack
-- **Apache Spark**: Distributed RDD/DataFrame processing
-- **HDFS**: Distributed file storage for datasets
-- **Parquet**: Columnar storage for efficiency
-- **BeautifulSoup4**: HTML parsing for Gutenberg fallback
+### Data Processing
+- **PySpark DataFrame/RDD** — distributed compute
+- **Parquet** — columnar storage (local + UC Volume)
+- **NLTK** — English stopwords (pre-bundled to Volume on Databricks)
+- **NumPy / pandas / matplotlib** — driver-side aggregation + plots
 
-### Web Services
-- **FastAPI**: High-performance REST API
-- **Streamlit**: Interactive web dashboard
-- **Uvicorn**: ASGI application server
+### Compute Targets
+- **Databricks Free Edition (Serverless)** — primary, for course report
+- **Local Spark `local[*]`** — dev + tests + notebook iteration
 
 ## Key Components
 
-### 1. Data Ingestion Layer (`scripts/` package)
-
-**Responsibility**: Download and prepare book data from Project Gutenberg
-
-**Modules**:
+### 1. Helper Scripts (`scripts/` package)
 
 | Module | Purpose |
-|--------|---------|
-| `text_cleaning_utils.py` | Text preprocessing (whitespace, lowercasing, token filtering) |
-| `gutenberg_downloader.py` | Project Gutenberg API client (search, metadata fetch, download) |
-| `hdfs_uploader.py` | Upload files to HDFS cluster |
-| `generate_sample_dataset.py` | Generate 100-book sample from Gutenberg mirror |
-| `download_and_upload_gutenberg.py` | Orchestrator: download + HDFS upload pipeline |
-
-**Entry Points**:
-```bash
-# Generate 100-book sample for local testing
-make download-sample
-
-# Download N books from Gutenberg API + upload to HDFS
-make download-gutenberg NUM=500
-```
+|---|---|
+| `text_cleaning_utils.py` | Strip Gutenberg headers/footers; lowercase; whitespace normalization |
+| `bootstrap-nltk-stopwords-to-volume.py` | Local helper — downloads NLTK stopwords corpus into `./build/nltk_data/` for upload to UC Volume (works around Databricks Serverless outbound block) |
 
 ### 2. Core LSH Pipeline (`src/` package)
 
-**Responsibility**: Distributed LSH computation on Spark for similarity indexing
+| Module | Purpose | Output Schema |
+|---|---|---|
+| `preprocessing.py` | Load raw books, strip headers, lowercase, regex clean, tokenize, remove stopwords | `(book_id: string, tokens: array<string>)` |
+| `shingling.py` | Generate k-shingles from token streams (k=3) | `(book_id, shingles: array<string>)` |
+| `minhash.py` | Compute N-dim MinHash signatures (universal hashing, md5-seeded) | `(book_id, signature: array<int>)` |
+| `lsh.py` | Hash signatures into bands/buckets; self-join for candidate pairs | `(book_id, band_id, bucket_hash)` |
+| `query.py` | Top-K similar books for a query book_id | `(book_id, similarity[, Title, Author])` |
+| `evaluation.py` | Pair-level recall/precision/F1/FPR vs ground-truth | metrics dict |
 
-**Modules**:
+#### Databricks-Aware SparkSession (`src/preprocessing.py`)
 
-| Module | Purpose | Output |
-|--------|---------|--------|
-| `preprocessing.py` | PySpark pipeline: load raw books, strip Gutenberg headers, lowercase, regex clean, tokenize, remove stopwords | `DataFrame(book_id: string, tokens: array<string>)` saved to Parquet |
-| `shingling/` | Generate k-shingles from token streams (k=5 default) | Shingle sets per book |
-| `minhash/` | Compute MinHash signatures using 200 hash functions | Signature vectors |
-| `lsh/` | Hash signatures into bands/buckets for clustering | Bucket assignments |
-| `query/` | Find similar books by querying LSH index | Top-K results |
-| `evaluation/` | Compute precision, recall, F1 metrics | Evaluation report |
+`create_spark_session()` returns `SparkSession.getActiveSession()` if present (Databricks auto-injects `spark`), else builds a local session honoring config-driven master/memory. No `PYSPARK_SUBMIT_ARGS` overrides.
 
-**Preprocessing Public API** (`src/preprocessing.py`):
+`_ensure_nltk_stopwords()` honors `NLTK_DATA` env var so the pre-bundled corpus on UC Volume is discovered without an outbound `nltk.download()` call.
 
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `create_spark_session` | `() -> SparkSession` | Create/get SparkSession from project config |
-| `load_raw_books` | `(spark: SparkSession) -> DataFrame` | Read all `.txt` files via `wholeTextFiles`; returns `(path, content)` |
-| `preprocess_books` | `(df: DataFrame, spark: SparkSession) -> DataFrame` | Full pipeline: headers → lowercase → regex → tokenize → stopwords; returns `(book_id, tokens)` |
-| `run_preprocessing` | `() -> DataFrame` | Full pipeline + Parquet save; reads back saved data |
+### 3. Configuration (`config/settings.py`)
 
-**Output**: Parquet files at `data/output/cleaned/` — schema `(book_id: string, tokens: array<string>)`
-**Validated**: 93 sample books processed successfully.
+Three dataclass configs selected by `LSH_ENV` env var:
 
-#### Shingling Public API (`src/shingling.py`):
+| `LSH_ENV` | Config | Spark master | Data root |
+|---|---|---|---|
+| `dev` (default) | `DevConfig` | `local[*]` | `./data/...` |
+| `cluster` | `ClusterConfig` (legacy) | `spark://master:7077` | `hdfs:///project-lsh/...` |
+| `databricks` | `DatabricksConfig` | `None` (auto-injected) | `/Volumes/<c>/<s>/<v>/...` |
 
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `generate_shingles` | `(df: DataFrame, k: int = None) -> DataFrame` | Generate word-level k-shingles from token arrays; returns `(book_id, shingles: array<string>)` |
-| `run_shingling` | `(input_path: str = None) -> DataFrame` | Entry point: load preprocessed tokens, generate shingles, returns `(book_id, shingles)` |
+`DatabricksConfig` honors `LSH_DBX_CATALOG` / `LSH_DBX_SCHEMA` / `LSH_DBX_VOLUME` env overrides (defaults: `workspace` / `lsh_book_recommendation` / `data`).
 
-**Algorithm**: Sliding window of k consecutive tokens joined by space (e.g., `[a, b, c, d]` with k=3 → `["a b c", "b c d"]`)
-**Configuration**: `SHINGLE_K=3` (dev/cluster) — customizable via settings
-**Output**: Parquet ready for MinHash input
+### 4. Notebooks (Run Surface)
 
-#### MinHash Public API (`src/minhash.py`):
+All 5 notebooks share a Databricks-aware setup preamble that:
+- Detects `_in_databricks` (checks `/Workspace` + `DATABRICKS_RUNTIME_VERSION`)
+- Sets `LSH_ENV=databricks` + `NLTK_DATA` to Volume path
+- Walks `sys.path` to repo root (Repos clone path or local `..`)
 
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `compute_minhash_signatures` | `(df: DataFrame, spark: SparkSession, num_hashes: int = None) -> DataFrame` | Compute MinHash signatures using universal hashing; returns `(book_id, signature: array<int>)` |
-| `estimate_jaccard` | `(sig_a: list, sig_b: list) -> float` | Estimate Jaccard similarity from two MinHash signatures |
-| `run_minhash` | `(input_path: str = None) -> DataFrame` | Entry point: load shingles, compute signatures |
-
-**Algorithm**: Universal hashing with md5 determinism — h_i(x) = ((a_i × md5(x) + b_i) mod PRIME) mod MAX_HASH
-**Configuration**: `MINHASH_NUM_HASHES=50` (dev) / `100` (cluster)
-**Hash Functions**: 200 for production (configurable)
-**Output**: Integer signatures, one per book
-
-#### LSH Public API (`src/lsh.py`):
-
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `build_lsh_index` | `(df: DataFrame, num_bands: int = None, rows_per_band: int = None) -> DataFrame` | Build LSH index by splitting signatures into bands & hashing; returns `(book_id, band_id, bucket_hash)` |
-| `find_candidate_pairs` | `(lsh_index_df: DataFrame) -> DataFrame` | Find candidate pairs via self-join on bucket membership; returns `(book_id_1, book_id_2)` |
-| `run_lsh` | `(input_path: str = None) -> DataFrame` | Entry point: load signatures, build LSH index |
-
-**Algorithm**: Band-based LSH — split signature into b bands of r rows, hash each band independently
-**Configuration**: `LSH_NUM_BANDS=10` (dev) / `20` (cluster), `LSH_ROWS_PER_BAND=5` (both)
-**Hash**: md5 for determinism across sessions
-**Output**: Band assignments, enables O(1) candidate pair retrieval
-
-#### Query Public API (`src/query.py`):
-
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `find_similar_books` | `(spark, book_id, top_k=None, signatures_df=None, lsh_index_df=None) -> DataFrame` | Find top-K similar books for given book_id via LSH lookup & Jaccard ranking; returns `(book_id, similarity[, Title, Author])` |
-| `run_query` | `(book_id: str, top_k: int = None) -> DataFrame` | Entry point: creates SparkSession and finds similar books |
-
-**Algorithm**:
-1. Load signatures & LSH index (from Parquet or provided DataFrames)
-2. Extract query book's signature
-3. Find all buckets for query book across all bands
-4. Self-join LSH index to find candidate books sharing ≥1 bucket
-5. Compute Jaccard similarity via MinHash signature comparison (broadcast UDF)
-6. Sort descending by similarity, limit to top-K
-7. Optional: enrich with Title/Author from CSV metadata
-
-**Configuration**: `DEFAULT_TOP_K=10` (tunable), `DATA_METADATA_PATH` (optional CSV for enrichment)
-**Output**: DataFrame with `book_id`, `similarity`, and optional `Title`, `Author` columns
-**Command-line**: `python -m src.main query <book_id> [top_k]`
-
-#### Main Pipeline (`src/main.py`):
-
-| Function | Signature | Purpose |
-|----------|-----------|---------|
-| `run_pipeline` | `() -> tuple[DataFrame, DataFrame]` | Full end-to-end pipeline: preprocess → shingle → minhash → lsh → save; returns `(signatures_df, lsh_index_df)` |
-
-**Steps**:
-1. Load preprocessed tokens from Parquet (`DATA_CLEANED_PATH`)
-2. Generate k-shingles (`SHINGLE_K`)
-3. Compute MinHash signatures (`MINHASH_NUM_HASHES`)
-4. Build LSH banding index (`LSH_NUM_BANDS`, `LSH_ROWS_PER_BAND`)
-5. Save signatures + index to Parquet
-
-**Output Paths**: `DATA_SIGNATURES_PATH`, `DATA_LSH_INDEX_PATH` (from config)
-**Timing**: ~2-3 min for 100 books (local[*])
-
-**Configuration** (from `config/settings.py`):
-- `SHINGLE_K=3` (dev) / `3` (cluster) - Shingle size
-- `MINHASH_NUM_HASHES=50` (dev) / `100` (cluster) - Number of hash functions
-- `LSH_NUM_BANDS=10` (dev) / `20` (cluster) - Band count
-- `LSH_ROWS_PER_BAND=5` (both) - Rows per band
-
-### 3. API & Frontend Layer (NOT YET IMPLEMENTED)
-
-**Status**: ⏳ Stubs only — no implementation code
-
-**API** (`api/` - 0 LOC):
-- `main.py` - FastAPI app (stub, 0 LOC)
-- `routers/books.py`, `datasets.py`, `metrics.py` - Endpoint handlers (stubs)
-- `schemas.py` - Pydantic models (stub, 0 LOC)
-
-**Planned Endpoints**:
-- `GET /health` - Service status
-- `POST /query` - Find similar books (requires book_id, returns top_k results)
-- `GET /dataset/info` - Dataset statistics
-- `GET /dataset/books` - List available books
-
-**Frontend** (`frontend/` - 0 LOC):
-- `app.py` - Streamlit entry point (stub, 0 LOC)
-- `pages/1_Browse_Books.py`, `2_Similar_Books.py`, `3_Dataset_Management.py`, `4_Dashboard.py` - Pages (stubs)
-
-**Planned Schemas**:
-- `QueryRequest(book_id: str, top_k: int)`
-- `SimilarBook(id: str, title: str, similarity: float)`
-- `QueryResponse(query_book: str, results: List[SimilarBook], execution_time: float)`
-
-### 4. Configuration Management
-
-**Location**: `config/` directory
-
-**Files**:
-- `dev.env` - Development mode (local Spark, sample data)
-- `cluster.env` - Cluster mode (Spark master, HDFS paths)
-- `settings.py` - Settings class (loads ENV-based config at runtime)
-
-**Key Environment Variables**:
-- `LSH_ENV` - Environment type (dev/cluster)
-- `HDFS_PATH` - HDFS dataset root
-- `SPARK_MASTER` - Spark master URL
-- `SHINGLING_K` - Shingle size parameter
+| Notebook | Purpose |
+|---|---|
+| `01_data_exploration.ipynb` | Dataset diagnostics |
+| `02_preprocessing_demo.ipynb` | Preprocessing walkthrough |
+| `03_lsh_pipeline_demo.ipynb` | Shingling → MinHash → LSH demo |
+| `04_experiments.ipynb` | TN1–TN4 metrics + plots (course report) |
+| `05_query_demo.ipynb` | Top-K query demo |
 
 ### 5. Development Infrastructure
 
-**Makefile Targets**:
+**Makefile targets**:
 ```bash
-# Development
-sync               # Install all dependencies with uv
-test               # Run pytest suite
-run                # Run ingestion pipeline (dev mode)
-query BOOK=pg1234  # Query similar books
-api                # Start FastAPI server
-ui                 # Start Streamlit dashboard
-notebook           # Start Jupyter Lab
-
-# Data operations
-download-sample              # Generate 100-book sample
-download-gutenberg NUM=500   # Download N books from Gutenberg
-
-# Code quality
-lint               # Check with ruff
-format             # Format with ruff
-
-# Cluster operations
-cluster-deploy     # Sync code to cluster
-cluster-upload     # Upload data to HDFS
-cluster-run        # Run pipeline on Spark cluster
-cluster-ui         # Start Streamlit on cluster
+sync       # Install all deps with uv
+test       # LSH_ENV=dev uv run pytest -v
+notebook   # Start Jupyter on notebooks/
+lint       # ruff check src/ tests/
+format     # ruff format src/ tests/
+clean      # Remove caches
 ```
 
-## Dependencies Overview
+## Dependencies
 
-### Production Dependencies
+### Production (5)
 ```
-pyspark>=3.5,<4          # Spark distributed computing
-nltk>=3.8               # Stopword corpus for preprocessing
-fastapi                  # REST API framework
-uvicorn                  # ASGI server
-streamlit               # Web UI framework
-beautifulsoup4          # HTML parsing (Gutenberg fallback)
-numpy, pandas           # Data manipulation
+pyspark>=3.5,<4    # Spark distributed compute
+nltk>=3.8          # Stopword corpus
+numpy
+pandas
+matplotlib
 ```
 
-### Development Dependencies
+### Development (5)
 ```
-pytest                  # Unit testing
-jupyter, notebook       # Interactive notebooks
-ipykernel              # Jupyter kernel
-ruff                   # Code linting & formatting
+pytest
+jupyter
+notebook
+ipykernel
+ruff
 ```
 
 ## Data Flow
 
 ```
-Project Gutenberg API
+Project Gutenberg (public domain)
+        ↓ (one-time, locally)
+data/sample/*.txt
+        ↓ run notebook 02 locally OR equivalent preprocessing
+data/output/cleaned/*.parquet  (93 books)
+        ↓ upload via Databricks CLI / UI
+/Volumes/<catalog>/<schema>/<volume>/cleaned/  (UC Volume)
         ↓
-scripts/gutenberg_downloader.py  (fetch metadata & download books)
+notebooks/04_experiments.ipynb  (Databricks Serverless)
         ↓
-scripts/hdfs_uploader.py  (upload to HDFS)
-        ↓
-HDFS /project-lsh/datasets/
-        ↓
-src/preprocessing/  (tokenize)
-        ↓
-src/shingling/  (k-shingles)
-        ↓
-src/minhash/  (signatures)
-        ↓
-src/lsh/  (bucket assignment)
-        ↓
-API (FastAPI) + UI (Streamlit)  (query interface)
+TN1–TN4 metrics + plots → /Volumes/.../output/experiment_results.csv
+        ↓ databricks fs cp
+./reports/  (local export for course report)
 ```
 
 ## Critical Files
 
 | File | Purpose |
-|------|---------|
-| `pyproject.toml` | Python config, dependencies, version |
-| `Makefile` | Development command shortcuts |
-| `CLAUDE.md` | Development guidelines & workflows |
-| `config/settings.py` | Centralized configuration management |
-| `api/main.py` | FastAPI application entry |
-| `scripts/__init__.py` | Makes scripts/ importable as Python package |
+|---|---|
+| `pyproject.toml` | Python deps + ruff/pytest config |
+| `Makefile` | Dev shortcuts |
+| `config/settings.py` | Dev/Cluster/Databricks config selection |
+| `src/preprocessing.py` | Databricks-aware SparkSession factory + NLTK_DATA bootstrap |
+| `notebooks/04_experiments.ipynb` | TN1–TN4 experiment runner (course report) |
+| `scripts/bootstrap-nltk-stopwords-to-volume.py` | Pre-bundle NLTK for Databricks upload |
+| `docs/databricks-setup-guide.md` | End-to-end Databricks Free Edition walkthrough |
 
 ## Testing Strategy
 
-**Unit Tests** (35/35 passing):
-- `tests/test_preprocessing.py` — 10 tests for preprocessing (tokenization, stopwords)
-- `tests/test_shingling.py` — 6 tests for shingle generation (k-values, edge cases)
-- `tests/test_minhash.py` — 6 tests for signature computation (hashing, Jaccard estimation)
-- `tests/test_lsh.py` — 6 tests for banding & bucketing (band hashing, candidate pairs)
-- `tests/test_query.py` — 7 tests for query engine (similarity ranking, top-k, unknown books)
+**Unit tests** (35/35 passing on `LSH_ENV=dev`):
+- `test_preprocessing.py` — 10 tests
+- `test_shingling.py` — 6 tests
+- `test_minhash.py` — 6 tests
+- `test_lsh.py` — 6 tests
+- `test_query.py` — 7 tests
 
-**Shared fixtures**: `tests/conftest.py` — session-scoped SparkSession (`local[1]`, 2g driver memory)
+Shared fixture: `tests/conftest.py` — session-scoped SparkSession (`local[1]`, 2g driver).
 
-**Integration tests**: `tests/integration/` — End-to-end pipeline validation (planned)
-
-**Run tests**:
 ```bash
-make test                    # Run all 35 tests
-LSH_ENV=dev uv run pytest    # Custom test execution
+make test                  # all 35 tests
+LSH_ENV=dev uv run pytest  # equivalent
 ```
 
 ## Security & Configuration
 
-### Secret Management
-- `.env` files are gitignored
-- Use `.env.example` as template
-- Environment variables loaded via `config/settings.py`
+- **Secrets**: never committed. Databricks PAT lives only in workspace user settings. `.env` files are gitignored.
+- **Data privacy**: all data is public-domain Project Gutenberg text; no PII.
+- **UC Volume access**: governed by Unity Catalog ACLs (single-user on Free Edition).
 
-### Data Privacy
-- Book data from Project Gutenberg (public domain)
-- No user data collection
-- Local HDFS storage (no cloud uploads in dev)
+## Removed in Databricks Migration (2026-04-28)
 
-## Unresolved Questions
+- `api/` (FastAPI stubs, 0 LOC)
+- `frontend/` (Streamlit stubs, 0 LOC)
+- `docker/` (PySpark+Jupyter dev image)
+- `scripts/setup_cluster.sh`, `run_pipeline.sh`, `upload_data.sh`
+- `scripts/hdfs_uploader.py`, `gutenberg_downloader.py`, `generate_sample_dataset.py`, `download_and_upload_gutenberg.py`
+- `src/main.py`, `baseline_main.py`, `prepare_sample.py`
+- `config/cluster.env`
+- Production deps: `fastapi`, `uvicorn`, `pydantic`, `python-multipart`, `streamlit`, `requests`, `beautifulsoup4`
+- Makefile targets: `api`, `ui`, `docker`, `download-sample`, `download-gutenberg`, `cluster-*`
 
-1. **HDFS Cluster Setup**: How to properly configure HDFS paths across dev/cluster environments?
-2. **Performance Scaling**: What LSH parameters (bands, hash functions) are optimal for 1M+ books?
-3. **Query Latency SLA**: What response time targets for similarity queries in production?
+See `plans/260428-0843-databricks-migration-experiments/` for the full migration plan.

@@ -27,15 +27,12 @@
 ### Directory Structure
 ```
 lsh-book-recommendation/
-├── config/               # Configuration (dev/cluster modes)
-├── src/                  # Core pipeline (FLAT FILES, not subdirs)
-├── api/                  # FastAPI server
-├── frontend/             # Streamlit UI
-├── scripts/              # Data ingestion utilities
-├── tests/                # Unit & integration tests
-├── notebooks/            # Jupyter exploration
+├── config/               # Configuration (dev/cluster/databricks modes)
+├── src/                  # Core Spark pipeline (FLAT FILES, not subdirs)
+├── scripts/              # Helper scripts (text cleaning, NLTK bootstrap)
+├── tests/                # Unit tests
+├── notebooks/            # Jupyter (Databricks-aware setup)
 ├── data/                 # Datasets (sample/ + output/)
-├── docker/               # Dev environment
 ├── docs/                 # Documentation
 └── plans/                # Implementation plans
 ```

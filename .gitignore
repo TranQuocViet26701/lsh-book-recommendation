@@ -30,3 +30,8 @@ uv.lock
 CLAUDE.md
 plans/
 repomix-output.xml
+
+# Databricks
+.databricks/
+build/
+reports/

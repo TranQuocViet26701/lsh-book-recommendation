@@ -1,7 +1,7 @@
 # LSH Book Recommendation — Project Roadmap
 
-**Last Updated**: 2026-03-04
-**Current Version**: 0.1.0
+**Last Updated**: 2026-04-28
+**Current Version**: 0.2.0
 **Project Duration**: 7 weeks (HK2 2025-2026)
 **Team**: Nguyễn Hoàng Kiên, Ngô Hoài Tú, Trần Quốc Việt
 
@@ -345,8 +345,31 @@ Weekly status updates:
 - Streamlit UI pages (`frontend/pages/2_Similar_Books.py`)
 - Query endpoint integration with existing `src/query.py`
 
+### Phase 3: Databricks Free Edition Migration (2026-04-28)
+**Status**: ✅ **COMPLETE** | **Completion Date**: 2026-04-28
+**Progress**: 100%
+
+Migrated experiment runtime from local Spark + planned API/UI to Databricks Free Edition (Serverless) for the course report. Stripped dead code (FastAPI/Streamlit/Docker stubs, HDFS scripts) and made `src/` Databricks-aware.
+
+**Completed Deliverables**:
+- `DatabricksConfig` with UC Volume paths (env-overridable)
+- `create_spark_session()` reuses auto-injected Serverless session
+- `_ensure_nltk_stopwords()` honors `NLTK_DATA` (pre-bundled corpus on Volume)
+- `scripts/bootstrap-nltk-stopwords-to-volume.py` (works around outbound block)
+- All 5 notebooks share Databricks-aware setup preamble
+- `docs/databricks-setup-guide.md` (end-to-end walkthrough)
+- Removed: `api/`, `frontend/`, `docker/`, cluster shell scripts, gutenberg ingestion scripts, `src/main.py`, `baseline_main.py`, `prepare_sample.py`, `cluster.env`
+- Pruned 7 production deps from `pyproject.toml`
+
+**Key Metrics**:
+- 35/35 unit tests pass (`LSH_ENV=dev`)
+- Production deps: 5 (was 12)
+- See plan: `plans/260428-0843-databricks-migration-experiments/`
+
+---
+
 ## Document Maintenance
 
-This roadmap updated: 2026-03-04
+This roadmap updated: 2026-04-28
 
-**Next Review Target**: 2026-03-11 (end of Week 7 / Serving layer)
+**Next Review Target**: post-experiment-run (after `04_experiments.ipynb` executes on Databricks)

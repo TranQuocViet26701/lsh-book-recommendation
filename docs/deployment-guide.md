@@ -1,398 +1,125 @@
-# Deployment Guide — Development & Cluster Setup
+# Deployment Guide
 
-**Last Updated**: 2026-03-03
-**Version**: 0.1.0
+**Last Updated**: 2026-04-28
+**Version**: 0.2.0
 
 ## Overview
 
-This guide covers setup for both development (Docker) and cluster deployment modes for LSH Book Recommendation.
+Two interchangeable run paths after the Databricks Free Edition migration:
 
-## Part 1: Development Environment (Docker)
+1. **Databricks Free Edition (Serverless)** — primary; used to produce the course report (notebook `04_experiments.ipynb`)
+2. **Local development** — for tests, dev iteration, debugging notebooks before pushing
+
+There is no longer a Docker dev image, no FastAPI server, and no Streamlit dashboard — the experiment surface is the Databricks notebook itself.
+
+---
+
+## Part 1 — Databricks Free Edition (Primary)
+
+End-to-end walkthrough: see [databricks-setup-guide.md](./databricks-setup-guide.md).
 
 ### Prerequisites
+- Databricks Free Edition account (signup link in setup guide)
+- GitHub PAT with `Contents: Read & Write` on this repo
+- Pre-cleaned parquet at `data/output/cleaned/*.parquet` (already in repo, 93 books)
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running
-- Sample data: `make download-sample` (run once on host)
+### One-Time Setup
+1. Sign up Free Edition
+2. Create UC Volume `/Volumes/workspace/lsh_book_recommendation/data/`
+3. Run `scripts/bootstrap-nltk-stopwords-to-volume.py` locally → upload `./build/nltk_data/` to Volume
+4. Upload `./data/output/cleaned/` to Volume
+5. Link GitHub PAT in Databricks user settings
+6. Clone repo as Git folder, switch to `databricks-migration` branch
 
-### Quick Start
+### Running an Experiment
+1. Open `notebooks/04_experiments.ipynb` → attach **Serverless**
+2. Run All
+3. CSV + plots saved to `/Volumes/.../output/`
+4. Pull artifacts: `databricks fs cp dbfs:/Volumes/.../output ./reports`
 
-```bash
-# 1. Build & start container (first time: ~2 min)
-make docker
-
-# 2. Open Jupyter (no login needed)
-open http://localhost:8888
-
-# 3. Run notebook: 01_data_exploration.ipynb
-
-# 4. Stop when done
-docker compose -f docker/docker-compose.yml down
-```
-
-### Services & Ports
-
-| Port | Service | Status |
-|------|---------|--------|
-| 8888 | Jupyter | Always running |
-| 4040 | Spark UI | When SparkSession active |
-| 8000 | FastAPI | Manual startup |
-| 8501 | Streamlit | Manual startup |
-
-### Architecture Details
-
-#### Base Image
-- `python:3.11-slim` + `openjdk-21-jre-headless`
-- PySpark installed via `uv sync` from pyproject.toml
-- Not using pre-built Spark images (cleaner, lighter)
-
-#### Volume Mount
-```
-Host: ./              →  Container: /app/
-  data/sample/*.txt       data/sample/*.txt
-  notebooks/*.ipynb       notebooks/*.ipynb
-  src/                    src/
-  config/settings.py      config/settings.py
-```
-
-Changes on host are immediately visible in container and vice versa.
-
-#### Virtual Environment
-- Python packages installed at `/opt/venv` (not `/app/.venv`)
-- This prevents overwriting by volume mount
-- `UV_PROJECT_ENVIRONMENT` tells `uv` where to find packages
-
-#### PYTHONPATH
-Set to `/app` so imports work without sys.path hacks:
-```python
-from config.settings import config
-from scripts.text_cleaning_utils import clean_gutenberg_text
-```
-
-### Running Services Inside Container
-
-#### Jupyter (Default)
-```bash
-# Already running - just open http://localhost:8888
-```
-
-#### FastAPI
-```bash
-docker exec -it lsh-dev uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-# Access: http://localhost:8000/docs (Swagger UI)
-```
-
-#### Streamlit
-```bash
-docker exec -it lsh-dev streamlit run frontend/app.py --server.port 8501
-# Access: http://localhost:8501
-```
-
-#### Interactive Shell
-```bash
-docker exec -it lsh-dev bash
-cd /app
-python -c "from config.settings import config; print(config.SHINGLE_K)"
-```
-
-### Jupyter Kernels
-
-Two kernels available:
-- **PySpark (LSH)** — uses `/opt/venv/bin/python` with all packages
-- **python3** — default kernel, same environment
-
-Use "PySpark (LSH)" kernel for notebooks.
-
-### Rebuilding & Cleanup
-
-After changing `pyproject.toml` dependencies:
-
-```bash
-# Rebuild image
-docker compose -f docker/docker-compose.yml build
-
-# Start fresh
-docker compose -f docker/docker-compose.yml up -d
-
-# Full rebuild (no cache)
-docker compose -f docker/docker-compose.yml build --no-cache
-```
-
-### Troubleshooting
-
-| Issue | Fix |
-|-------|-----|
-| `localhost:8888` not loading | Check: `docker logs lsh-dev` |
-| `JAVA_HOME` error | Verify env var set to `/usr/lib/jvm/java-21` |
-| Import errors in notebook | Use "PySpark (LSH)" kernel, check PYTHONPATH |
-| Old packages after dep change | Rebuild: `docker compose ... build --no-cache` |
-| Port already in use | Kill other services: `lsof -i :8888` |
-| Container won't start | Check disk space: `docker system df` |
+### Constraints
+- Serverless-only (no cluster mgmt)
+- 2.5h notebook timeout
+- Outbound internet restricted (NLTK pre-bundled to Volume)
+- Single-user UC ACLs on Free Edition
 
 ---
 
-## Part 2: Cluster Deployment
+## Part 2 — Local Development
 
 ### Prerequisites
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
+- Java 11+ (PySpark requirement)
 
-- Hadoop cluster with HDFS namenode
-- Spark cluster (standalone or YARN)
-- SSH access to cluster master node
-- Java 11+ on all cluster nodes
-
-### Environment Configuration
-
-#### Setup Cluster Credentials
-
-1. Create `config/cluster.env`:
-```bash
-LSH_ENV=cluster
-SPARK_MASTER=spark://master.cluster.local:7077
-HDFS_NAMENODE=hdfs://master.cluster.local:9000
-```
-
-2. Set environment before running:
-```bash
-export LSH_ENV=cluster
-```
-
-#### Cluster Configuration
-
-Edit `config/settings.py` for cluster-specific settings:
-- `SPARK_DRIVER_MEMORY=4g` — Increase for larger datasets
-- `SPARK_EXECUTOR_MEMORY=4g` — Per executor memory
-- `DATA_RAW_PATH=hdfs://...` — HDFS paths
-- `SHINGLE_K=3` — Tunable per experiment
-- `MINHASH_NUM_HASHES=100` — Cluster uses more hashes
-- `LSH_NUM_BANDS=20` — More bands for larger datasets
-
-### Deployment Steps
-
-#### 1. Deploy Code to Cluster
+### Setup
 
 ```bash
-# Copy project to cluster master
-make cluster-deploy
-# This runs:
-# rsync -av --exclude=data/ --exclude=.git/ \
-#   ./ user@master:/path/to/lsh-book-recommendation/
+git clone <repo-url>
+cd lsh-book-recommendation
+uv sync --all-extras
 ```
 
-#### 2. Upload Data to HDFS
+### Run Tests
 
 ```bash
-# Create HDFS directories and upload sample data
-make cluster-upload
-# Creates: /project-lsh/datasets/gutenberg_default/raw/
-# Uploads sample books to HDFS
+LSH_ENV=dev uv run pytest -v
+# Expect: 35/35 pass
 ```
 
-#### 3. Run Preprocessing Pipeline
+### Run Notebooks
 
 ```bash
-# Run on Spark cluster
-make cluster-run
-# Executes: spark-submit --master spark://master:7077 \
-#   --driver-memory 4g --executor-memory 4g \
-#   src/main.py
+make notebook
+# Or: LSH_ENV=dev uv run jupyter notebook notebooks/
 ```
 
-#### 4. Start Streamlit on Cluster
+The setup preamble in each notebook auto-detects local vs Databricks; no env vars needed beyond `LSH_ENV=dev` (which is the default).
+
+### Lint / Format
 
 ```bash
-# SSH into master and start UI
-make cluster-ui
-# Then tunnel to local machine:
-ssh -L 8501:localhost:8501 user@master
-
-# Access: http://localhost:8501
-```
-
-### HDFS Data Structure
-
-After deployment, HDFS contains:
-```
-/project-lsh/
-├── datasets/
-│   └── gutenberg_default/
-│       ├── raw/              # Raw .txt files (input)
-│       ├── cleaned/          # Preprocessed tokens (Parquet)
-│       ├── signatures/       # MinHash signatures
-│       ├── lsh_index/        # LSH bucket assignments
-│       └── metadata/         # Book metadata
-└── logs/                     # Job logs
-```
-
-### Monitoring Cluster Execution
-
-#### Spark UI
-- **Driver**: http://master:4040 (while job running)
-- **History**: http://master:18080 (persistent)
-
-#### Logs
-```bash
-# Application logs (on driver)
-tail -f /path/to/lsh-book-recommendation/logs/*.log
-
-# HDFS logs
-hdfs dfs -cat /user/hadoop/logs/*.log
-
-# Spark history (after job completes)
-http://master:18080/
-```
-
-### Performance Tuning
-
-#### Spark Configuration
-
-Adjust in `config/settings.py` based on cluster size:
-
-**Small Cluster (3 nodes)**:
-```python
-SPARK_DRIVER_MEMORY = "2g"
-SPARK_EXECUTOR_MEMORY = "2g"
-```
-
-**Large Cluster (10+ nodes)**:
-```python
-SPARK_DRIVER_MEMORY = "8g"
-SPARK_EXECUTOR_MEMORY = "8g"
-```
-
-#### Partitioning Strategy
-```python
-# More partitions = better parallelism, but more overhead
-# Default: auto (based on data size)
-# Tune if seeing skew: df.repartition(num_partitions)
-```
-
-#### Caching
-```python
-# Cache frequently-accessed DataFrames
-df.cache()
-df.count()  # Force materialization
-```
-
-### Troubleshooting Cluster Deployment
-
-| Issue | Debug | Fix |
-|-------|-------|-----|
-| Connection refused to Spark | `ssh master` then `jps` | Check Spark daemons running |
-| HDFS permission denied | `hdfs dfs -ls /` | Check user permissions, enable auth |
-| Out of memory | Check Spark UI | Increase executor memory, reduce dataset |
-| Data not found in HDFS | `hdfs dfs -ls /project-lsh/` | Re-run upload: `make cluster-upload` |
-| Slow queries | Check Spark UI, check shuffle | Repartition, increase memory, check LSH params |
-
-### Scaling to Larger Datasets
-
-#### For 500+ Books
-
-```bash
-# Download more books
-make download-gutenberg NUM=500
-
-# Upload to HDFS
-make cluster-upload
-
-# Re-run preprocessing (data will be auto-discovered)
-make cluster-run
-```
-
-#### For 1000+ Books
-
-- Consider multi-node HDFS setup
-- Increase executors: `SPARK_NUM_EXECUTORS=16`
-- Increase executor cores: `SPARK_EXECUTOR_CORES=4`
-- Use partitioned output: `output.partitionBy("first_letter")`
-
----
-
-## Development Workflow
-
-### Local Development
-
-```bash
-# Setup once
-make sync
-
-# For each change:
-make lint
-make test
-make run  # Test pipeline locally
-
-# View results
-open notebooks/02_preprocessing_demo.ipynb
-```
-
-### Cluster Testing
-
-```bash
-# Test configuration
-LSH_ENV=cluster make test
-
-# Run on cluster (with small dataset first)
-make cluster-run
-
-# Monitor progress
-ssh master -L 4040:localhost:4040
-# Open http://localhost:4040
-```
-
-### Iterative Development
-
-1. Develop & test locally (faster)
-2. Commit & push to git
-3. Deploy to cluster
-4. Run with full dataset
-5. Collect metrics & iterate
-
----
-
-## Maintenance
-
-### Regular Tasks
-
-**Weekly**:
-- Monitor Spark UI for errors
-- Check HDFS disk usage: `hdfs dfsadmin -report`
-- Review application logs
-
-**Monthly**:
-- Backup LSH index to external storage
-- Update dependencies: `uv sync --all-extras`
-- Review performance metrics
-
-### Cleanup
-
-```bash
-# Remove old outputs (dev)
-rm -rf data/output/*
-
-# Remove old HDFS data (cluster)
-hdfs dfs -rm -r /project-lsh/datasets/old_data/
-
-# Prune old logs
-find logs/ -mtime +30 -delete
-```
-
-### Upgrading
-
-```bash
-# Update PySpark version in pyproject.toml
-uv sync
-
-# Test locally
-make test
-
-# Deploy to cluster
-make cluster-deploy
+make lint     # ruff check
+make format   # ruff format
 ```
 
 ---
 
-## References
+## Configuration
 
-- [Docker Documentation](https://docs.docker.com/)
-- [Apache Spark Deployment](https://spark.apache.org/docs/latest/cluster-overview.html)
-- [HDFS Architecture](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-hdfs/HdfsDesign.html)
-- [Project Configuration](./code-standards.md#configuration--constants)
-- [System Architecture](./system-architecture.md)
+`config/settings.py` exposes three configs selected by `LSH_ENV`:
+
+| `LSH_ENV` | Use case | Spark master | Data root |
+|---|---|---|---|
+| `dev` (default) | local Jupyter, pytest | `local[*]` | `./data/...` |
+| `cluster` (legacy) | reserved for future on-prem Spark | `spark://master:7077` | `hdfs://...` |
+| `databricks` | Free Edition Serverless | `None` (auto-injected) | `/Volumes/.../...` |
+
+### Databricks Volume Path Override
+
+Defaults: `/Volumes/workspace/lsh_book_recommendation/data/`. Override with env vars (set in notebook before importing config):
+
+```python
+import os
+os.environ["LSH_DBX_CATALOG"] = "my_catalog"
+os.environ["LSH_DBX_SCHEMA"]  = "my_schema"
+os.environ["LSH_DBX_VOLUME"]  = "my_volume"
+```
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `nltk.LookupError` on Databricks | NLTK_DATA not set / corpus not uploaded | Re-upload `./build/nltk_data/` to Volume; check `NLTK_DATA` env in setup cell |
+| `parquet path not found` on Databricks | Cleaned parquet not in Volume | `databricks fs ls dbfs:/Volumes/.../cleaned` to verify |
+| TN3 OOM at size=1500 | Driver memory ceiling on Free Edition | Edit `sizes_tn3 = [200, 500, 1000]` and re-run |
+| Local pytest fails on macOS Spark socket | macOS loopback DNS quirk | Already handled by `tests/conftest.py` (`spark.sql.shuffle.partitions=4`) |
+
+---
+
+## See Also
+
+- [databricks-setup-guide.md](./databricks-setup-guide.md) — full Databricks walkthrough
+- [system-architecture.md](./system-architecture.md) — architectural overview
+- [codebase-summary.md](./codebase-summary.md) — module-by-module breakdown
