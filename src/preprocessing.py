@@ -16,7 +16,10 @@ from scripts.text_cleaning_utils import strip_gutenberg_headers
 
 
 def _ensure_nltk_stopwords() -> set:
-    """Download NLTK English stopwords if missing, return as set."""
+    """Return English stopwords. Honors NLTK_DATA env var (pre-bundled on Databricks)."""
+    nltk_data_dir = os.getenv("NLTK_DATA")
+    if nltk_data_dir and nltk_data_dir not in nltk.data.path:
+        nltk.data.path.insert(0, nltk_data_dir)
     try:
         from nltk.corpus import stopwords
         return set(stopwords.words("english"))
@@ -38,17 +41,22 @@ def _make_remove_stopwords_udf(broadcast_stops):
 
 
 def create_spark_session() -> SparkSession:
-    """Create or get SparkSession using project config."""
-    # Set driver memory before JVM starts (only if not already set)
-    os.environ.setdefault("PYSPARK_SUBMIT_ARGS", "--driver-memory 4g pyspark-shell")
-    return (
-        SparkSession.builder
-        .master(config.SPARK_MASTER)
-        .appName(config.SPARK_APP_NAME)
-        .config("spark.executor.memory", config.SPARK_EXECUTOR_MEMORY)
-        .config("spark.driver.memory", config.SPARK_DRIVER_MEMORY)
-        .getOrCreate()
-    )
+    """Create or get SparkSession. Databricks-aware: reuses injected session.
+
+    On Databricks Serverless, `spark` is auto-injected and `getActiveSession()`
+    returns it. Locally, build a fresh session honoring config-driven master/memory.
+    """
+    active = SparkSession.getActiveSession()
+    if active is not None:
+        return active
+    builder = SparkSession.builder.appName(config.SPARK_APP_NAME)
+    if getattr(config, "SPARK_MASTER", None):
+        builder = builder.master(config.SPARK_MASTER)
+    if getattr(config, "SPARK_DRIVER_MEMORY", None):
+        builder = builder.config("spark.driver.memory", config.SPARK_DRIVER_MEMORY)
+    if getattr(config, "SPARK_EXECUTOR_MEMORY", None):
+        builder = builder.config("spark.executor.memory", config.SPARK_EXECUTOR_MEMORY)
+    return builder.getOrCreate()
 
 
 def load_raw_books(spark: SparkSession) -> DataFrame:
