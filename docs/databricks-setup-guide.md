@@ -73,6 +73,31 @@ databricks fs ls dbfs:/Volumes/workspace/lsh_book_recommendation/data/cleaned
 
 ---
 
+## Refreshing the Dataset
+
+To refetch books grouped by Gutenberg Bookshelves (richer TN1/TN2 ground-truth — books in the same shelf share vocabulary):
+
+```bash
+# 1. Run fetcher LOCALLY (Databricks Serverless blocks outbound HTTP)
+LSH_ENV=dev uv run python -c "
+from scripts.fetch_gutenberg_bookshelf import fetch_bookshelves
+fetch_bookshelves(['Detective Fiction', \"Children's Literature\", 'Science Fiction'], 30)
+"
+
+# 2. Preprocess locally → parquet
+LSH_ENV=dev uv run python -c "from src.preprocessing import run_preprocessing; run_preprocessing()"
+
+# 3. Upload parquet to Volume (replaces the cleaned dataset)
+databricks fs cp -r ./data/output/cleaned \
+    dbfs:/Volumes/workspace/lsh_book_recommendation/data/cleaned --overwrite
+```
+
+The fetcher caches the PG catalog CSV at `./data/pg_catalog.csv` (~20 MB) on first run; subsequent calls reuse it. Re-running `fetch_bookshelf(...)` with the same args is idempotent (already-downloaded `pg<id>.txt` files are skipped).
+
+> **Why bookshelves?** A 100-book random sample yields very few TN1/TN2 ground-truth pairs (J ≥ 0.5). Books from the same shelf (e.g. all detective fiction) share more vocabulary, producing a richer evaluation set.
+
+---
+
 ## Step 5 — Link GitHub via Personal Access Token
 
 1. **GitHub** → Settings → Developer settings → **Personal access tokens** → **Fine-grained tokens** → **Generate new token**

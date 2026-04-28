@@ -40,6 +40,7 @@ lsh-book-recommendation/
 ├── scripts/              # Helper scripts
 │   ├── __init__.py
 │   ├── text_cleaning_utils.py             # Gutenberg header strip
+│   ├── fetch_gutenberg_bookshelf.py       # PG bookshelf-grouped fetcher (notebook-callable)
 │   └── bootstrap-nltk-stopwords-to-volume.py  # Pre-bundle NLTK for Databricks
 ├── src/                  # Core Spark pipeline
 │   ├── __init__.py
@@ -91,6 +92,7 @@ lsh-book-recommendation/
 |---|---|
 | `text_cleaning_utils.py` | Strip Gutenberg headers/footers; lowercase; whitespace normalization |
 | `bootstrap-nltk-stopwords-to-volume.py` | Local helper — downloads NLTK stopwords corpus into `./build/nltk_data/` for upload to UC Volume (works around Databricks Serverless outbound block) |
+| `fetch_gutenberg_bookshelf.py` | Notebook-callable PG bookshelf fetcher — filters PG catalog CSV by `Bookshelves` column, downloads `pg<id>.txt` to `DATA_RAW_PATH` (run locally only; underscore filename is a Python import requirement) |
 
 ### 2. Core LSH Pipeline (`src/` package)
 
