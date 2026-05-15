@@ -16,82 +16,63 @@
 ## 🏗️ Architecture
 
 ```
-Streamlit → FastAPI → PySpark → HDFS + Parquet
+Notebook (Databricks Serverless / Local) → PySpark → Parquet (UC Volume / local)
 ```
 
 ## 📁 Structure
 
 ```
 project-lsh/
-├── config/           # dev.env, cluster.env, settings.py
+├── config/           # dev.env, settings.py (Dev/Cluster/Databricks configs)
 ├── src/              # preprocessing, shingling, minhash, lsh, query, evaluation
-├── api/              # FastAPI server + routers
-├── frontend/         # Streamlit pages
-├── notebooks/        # Jupyter exploration & demo
-├── scripts/          # Cluster setup & deploy
-├── tests/            # Unit tests
-├── data/sample/      # 100 books for dev
-├── docker/           # Dev container
+├── notebooks/        # 5 Jupyter notebooks (Databricks-aware setup cells)
+├── scripts/          # text-cleaning utils + databricks NLTK bootstrap
+├── tests/            # Unit tests (35 passing)
+├── data/sample/      # 100 books for local dev
+├── docs/             # Setup guides, architecture, code standards
+├── plans/            # Implementation plans
 ├── Makefile
-└── requirements.txt
+└── pyproject.toml
 ```
 
 ## 🚀 Quick Start
 
-### Prerequisites
-- [uv](https://docs.astral.sh/uv/) (recommended) or pip
-- Java 11+ (required for PySpark)
+### Option A — Run on Databricks Free Edition (recommended for the report)
 
-### Setup
+End-to-end notebook execution on Databricks Serverless. No local Spark needed.
+
+→ See [docs/databricks-setup-guide.md](docs/databricks-setup-guide.md) for full walkthrough.
+
+Summary:
+1. Sign up Free Edition → create UC Volume
+2. Upload pre-cleaned parquet + NLTK corpus to Volume
+3. Link GitHub PAT → clone repo as Git folder
+4. Open `notebooks/04_experiments.ipynb` → attach Serverless → Run All
+5. Export `experiment_results.csv` + plots from Volume
+
+### Option B — Local Development
 
 ```bash
-# Clone & setup
-git clone <repo-url>
-cd project-lsh
+# Prerequisites: uv (https://docs.astral.sh/uv/) + Java 11+
 
-# Install with uv (fast!)
+git clone <repo-url>
+cd lsh-book-recommendation
 uv sync --all-extras
 
-# Or with Docker
-docker compose -f docker/docker-compose.yml up -d
-```
+# Run tests
+LSH_ENV=dev uv run pytest -v
 
-### Run
-
-```bash
-# Notebooks
-uv run jupyter notebook notebooks/
-
-# Pipeline
-LSH_ENV=dev uv run python -m src.main
-
-# API + Frontend
-LSH_ENV=dev uv run uvicorn api.main:app --port 8000
-LSH_ENV=dev uv run streamlit run frontend/app.py
-```
-
-## 📖 Data
-
-### Sample Dataset (100 books)
-
-Pre-selected 100 Gutenberg books across 12+ categories in `data/sample/`.
-
-TODO: missing description about gutenberg metadata file 
-
-```bash
-# Regenerate sample dataset
-make download-sample
-```
-
-### Full Dataset
-
-```bash
-# Download N books from Gutenberg
-make download-gutenberg NUM=500
+# Run notebooks
+LSH_ENV=dev uv run jupyter notebook notebooks/
 ```
 
 ## 🧪 Tests
 
 ```bash
-uv run pytest -v
+LSH_ENV=dev uv run pytest -v
+# Expect: 35/35 pass
 ```
+
+## 📖 Data
+
+Pre-selected 93 cleaned books from Project Gutenberg in `data/output/cleaned/*.parquet` (used directly by Databricks notebook flow). Raw `.txt` samples for local dev in `data/sample/`.

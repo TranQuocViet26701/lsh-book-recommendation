@@ -29,12 +29,17 @@ _EMPTY_SCHEMA = StructType([
 ])
 
 
-def _make_jaccard_udf(query_sig_broadcast):
-    """Factory for Jaccard similarity UDF using broadcast query signature."""
+def _make_jaccard_udf(query_signature):
+    """Factory for Jaccard similarity UDF. Captures query_signature via closure.
+
+    Closure capture replaces sparkContext.broadcast — the signature (~400 bytes for
+    100 hashes) is serialized once when the UDF is registered. This avoids the
+    sparkContext attribute access that Databricks Serverless blocks.
+    """
 
     @F.udf(FloatType())
     def jaccard_udf(candidate_sig):
-        return float(estimate_jaccard(query_sig_broadcast.value, candidate_sig))
+        return float(estimate_jaccard(query_signature, candidate_sig))
 
     return jaccard_udf
 
@@ -94,9 +99,8 @@ def find_similar_books(
     # Join candidates with their signatures
     candidate_sigs = candidates.join(signatures_df, "book_id")
 
-    # Compute Jaccard similarity via broadcast UDF
-    query_sig_bc = spark.sparkContext.broadcast(query_signature)
-    jaccard_udf = _make_jaccard_udf(query_sig_bc)
+    # Compute Jaccard similarity via closure-captured UDF (Serverless-compatible)
+    jaccard_udf = _make_jaccard_udf(query_signature)
 
     result = (
         candidate_sigs
@@ -194,9 +198,8 @@ def find_similar_by_text(
     # Join candidates with their signatures
     candidate_sigs = candidates.join(signatures_df, "book_id")
 
-    # Compute Jaccard similarity via broadcast UDF
-    query_sig_bc = spark.sparkContext.broadcast(query_signature)
-    jaccard_udf = _make_jaccard_udf(query_sig_bc)
+    # Compute Jaccard similarity via closure-captured UDF (Serverless-compatible)
+    jaccard_udf = _make_jaccard_udf(query_signature)
 
     result = (
         candidate_sigs

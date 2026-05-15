@@ -43,8 +43,12 @@ def _generate_hash_params(num_hashes: int, seed: int = 42) -> list:
     ]
 
 
-def _make_minhash_udf(hash_params_broadcast):
-    """Factory for MinHash UDF using broadcast hash parameters.
+def _make_minhash_udf(hash_params):
+    """Factory for MinHash UDF. Captures hash_params via closure (Serverless-compatible).
+
+    Closure capture replaces sparkContext.broadcast — the params (~1KB for 100 hashes)
+    are serialized once when the UDF is registered, mirroring broadcast semantics
+    without the JVM sparkContext access blocked on Databricks Serverless.
 
     The UDF computes: for each hash function h_i, min over all shingles of
     ((a_i * md5(shingle) + b_i) % PRIME) % MAX_HASH.
@@ -53,9 +57,8 @@ def _make_minhash_udf(hash_params_broadcast):
     def minhash(shingles):
         if not shingles:
             return []
-        params = hash_params_broadcast.value
         signature = []
-        for a, b in params:
+        for a, b in hash_params:
             min_val = MAX_HASH
             for s in shingles:
                 h = int(hashlib.md5(s.encode("utf-8")).hexdigest(), 16) % LARGE_PRIME
@@ -74,7 +77,7 @@ def compute_minhash_signatures(
 
     Args:
         df: DataFrame with columns (book_id, shingles).
-        spark: Active SparkSession (needed for broadcast).
+        spark: Active SparkSession (kept for API stability; no longer required).
         num_hashes: Signature length (default: config.MINHASH_NUM_HASHES).
 
     Returns:
@@ -84,8 +87,7 @@ def compute_minhash_signatures(
         num_hashes = config.MINHASH_NUM_HASHES
 
     hash_params = _generate_hash_params(num_hashes)
-    broadcast_params = spark.sparkContext.broadcast(hash_params)
-    minhash_udf = _make_minhash_udf(broadcast_params)
+    minhash_udf = _make_minhash_udf(hash_params)
 
     result = df.withColumn("signature", minhash_udf(F.col("shingles")))
     return result.select("book_id", "signature")
